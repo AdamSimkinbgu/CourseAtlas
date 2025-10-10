@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"lint: no checks configured yet\"",
+    "test": "echo \"test: no suites configured yet\""
   },
   "dependencies": {
     "react": "^18.3.1",

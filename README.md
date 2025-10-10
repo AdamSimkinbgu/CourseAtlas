@@ -1,5 +1,8 @@
 # Course Atlas
 
+![Backend CI](https://github.com/<org>/CourseAtlas/actions/workflows/ci-backend.yml/badge.svg)
+![Frontend CI](https://github.com/<org>/CourseAtlas/actions/workflows/ci-frontend.yml/badge.svg)
+
 Course Atlas is a course planning platform that helps students visualise prerequisites and track progress. This repository contains the monorepo skeleton for backend and frontend services.
 
 ## Repository Layout
