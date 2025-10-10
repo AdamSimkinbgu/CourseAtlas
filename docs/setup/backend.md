@@ -48,6 +48,9 @@ cp .env.example .env
 | `SUPABASE_PROJECT_URL` | Base URL for Supabase project. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key used for privileged backend calls. |
 | `SUPABASE_ANON_KEY` | Public anon key for verifying JWTs if needed. |
+| `AUTH_DOMAIN` | Issuer domain from Supabase Auth | Auth0. |
+| `AUTH_AUDIENCE` | API audience expected in access tokens. | Auth provider dashboard |
+| `AUTH_JWKS_URL` | JWKS endpoint for fetching signing keys. | Auth provider dashboard |
 
 Secrets live in 1Password/Bitwarden or the Supabase dashboard. Never commit populated `.env`.
 

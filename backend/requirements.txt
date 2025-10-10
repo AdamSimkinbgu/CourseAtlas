@@ -3,6 +3,7 @@ fastapi
 httpx
 psycopg[binary]
 pydantic-settings
+pyjwt
 pytest
 python-dotenv
 sqlmodel

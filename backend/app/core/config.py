@@ -20,6 +20,9 @@ class Settings(BaseSettings):
         default="sqlite:///./course_atlas.db",
         alias="DATABASE_URL",
     )
+    auth_domain: str = Field(default="", alias="AUTH_DOMAIN")
+    auth_audience: str = Field(default="", alias="AUTH_AUDIENCE")
+    auth_jwks_url: str = Field(default="", alias="AUTH_JWKS_URL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

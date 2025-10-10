@@ -1,12 +1,12 @@
 """Database session management."""
 
-from collections.abc import Generator
+from typing import Dict, Generator
 
 from sqlmodel import Session, create_engine
 
 from app.core.config import settings
 
-connect_args = {}
+connect_args: Dict[str, object] = {}
 if settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 

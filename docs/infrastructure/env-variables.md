@@ -13,5 +13,8 @@ Central reference for environment configuration across Course Atlas services. Us
 | `VITE_API_BASE_URL` | Frontend | URL pointing to backend API (local or deployed). | Local config |
 | `VITE_SUPABASE_PROJECT_URL` | Frontend | Same as `SUPABASE_PROJECT_URL`, for client SDK usage. | Supabase dashboard |
 | `VITE_SUPABASE_ANON_KEY` | Frontend | Public anon key for client SDK. | Supabase dashboard |
+| `AUTH_DOMAIN` | Backend | JWT issuer domain from Supabase/Auth0. | Auth provider |
+| `AUTH_AUDIENCE` | Backend | Expected audience claim for access tokens. | Auth provider |
+| `AUTH_JWKS_URL` | Backend | JWKS endpoint for validating tokens. | Auth provider |
 
 Secrets are managed in the team password manager and mirrored into GitHub Actions as encrypted repository secrets. Never commit populated `.env` files.
