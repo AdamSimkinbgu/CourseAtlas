@@ -1,7 +1,7 @@
 # Course Atlas
 
-![Backend CI](https://github.com/<org>/CourseAtlas/actions/workflows/ci-backend.yml/badge.svg)
-![Frontend CI](https://github.com/<org>/CourseAtlas/actions/workflows/ci-frontend.yml/badge.svg)
+![Backend CI](https://github.com/AdamSimkinbgu/CourseAtlas/actions/workflows/ci-backend.yml/badge.svg)
+![Frontend CI](https://github.com/AdamSimkinbgu/CourseAtlas/actions/workflows/ci-frontend.yml/badge.svg)
 
 Course Atlas is a course planning platform that helps students visualise prerequisites and track progress. This repository contains the monorepo skeleton for backend and frontend services.
 
@@ -34,6 +34,18 @@ npm run dev
 ```
 
 Set `VITE_API_BASE_URL` (see `.env.example`) to point at the backend service.
+
+### Code Quality Tooling
+
+- **Format (frontend):** `npm run format`
+- **Lint (frontend):** `npm run lint`
+- **Test (frontend):** `npm run test`
+- **Type-check (frontend):** `npm run typecheck`
+- **Format (backend):** `black backend`
+- **Lint (backend):** `ruff check backend`
+- **Tests (backend):** `pytest`
+
+See `docs/conventions/coding-standards.md` for detailed standards and folder layout.
 
 ## Provider Choices
 

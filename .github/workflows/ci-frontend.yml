@@ -23,10 +23,18 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      - name: Format check
+        working-directory: frontend
+        run: npm run format
+
       - name: Lint
         working-directory: frontend
-        run: npm run lint --if-present
+        run: npm run lint
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
 
       - name: Test
         working-directory: frontend
-        run: npm run test -- --watch=false --runInBand
+        run: npm run test
