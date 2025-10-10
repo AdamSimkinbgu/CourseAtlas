@@ -9,9 +9,15 @@ Course Atlas is a course planning platform that helps students visualise prerequ
 
 - `backend/` – FastAPI service (Supabase Postgres + Supabase Auth).
 - `frontend/` – React + Vite client deployed on Vercel.
-- `docs/` – Project documentation and planning artefacts.
+- `docs/` – Project documentation and planning artefacts (see `docs/setup/` for environment notes).
 
 ## Getting Started
+
+### Prerequisites
+
+- Python 3.12+
+- Node.js 20+ and npm 10+
+- Docker Desktop (optional – used for local Postgres via `docker-compose`)
 
 ### Backend
 
@@ -35,6 +41,18 @@ npm run dev
 
 Set `VITE_API_BASE_URL` (see `.env.example`) to point at the backend service.
 
+### One-command helpers
+
+```bash
+make bootstrap        # install backend + frontend dependencies
+make backend-dev      # activate venv and run uvicorn
+make frontend-dev     # start Vite dev server
+make lint             # run backend + frontend linters
+make test             # run frontend vitest placeholder (backend tests TBD)
+```
+
+See `docs/setup/backend.md` and `docs/setup/frontend.md` for detailed environment setup and troubleshooting tips.
+
 ### Code Quality Tooling
 
 - **Format (frontend):** `npm run format`
@@ -46,6 +64,12 @@ Set `VITE_API_BASE_URL` (see `.env.example`) to point at the backend service.
 - **Tests (backend):** `pytest`
 
 See `docs/conventions/coding-standards.md` for detailed standards and folder layout.
+
+### Smoke Test Checklist
+
+1. `make bootstrap`
+2. `make backend-dev` (ensure `/healthz` returns `{"status":"ok"}`)
+3. `make frontend-dev` (homepage shows “Backend responded with: ok”)
 
 ## Provider Choices
 
