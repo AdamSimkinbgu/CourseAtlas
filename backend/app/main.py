@@ -1,33 +1,35 @@
-"""FastAPI application entrypoint with basic health endpoint."""
+"""FastAPI ASGI application configured with settings and routers."""
 
-from typing import Dict, List
+from typing import Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Course Atlas API")
+from app.api.v1.routes import router as api_router
+from app.core.config import settings
 
-allowed_origins: List[str] = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+app = FastAPI(title=settings.app_name, docs_url="/docs", openapi_url="/openapi.json")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(api_router, prefix="/api")
+
 
 @app.get("/healthz", tags=["health"])
 def health_check() -> Dict[str, str]:
     """Verify the API process is running."""
+
     return {"status": "ok"}
 
 
 @app.get("/", tags=["health"])
 def root() -> Dict[str, str]:
     """Provide a simple root response for manual checks."""
+
     return {"message": "Course Atlas API is running"}

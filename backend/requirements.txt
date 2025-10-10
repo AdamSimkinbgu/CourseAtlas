@@ -1,6 +1,9 @@
+alembic
 fastapi
-uvicorn
-sqlmodel
-psycopg[binary]
-pytest
 httpx
+psycopg[binary]
+pydantic-settings
+pytest
+python-dotenv
+sqlmodel
+uvicorn

@@ -19,3 +19,10 @@ def test_root_returns_message() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"message": "Course Atlas API is running"}
+
+
+def test_api_ping() -> None:
+    response = client.get("/api/v1/ping")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "pong"}
