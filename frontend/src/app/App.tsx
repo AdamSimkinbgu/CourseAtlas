@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppProviders } from "./providers";
 import { Layout } from "../components/Layout";
 import { DashboardPage } from "../pages/DashboardPage";
+import { GraphEditorPage } from "../pages/GraphEditorPage";
 import { LoginPage } from "../pages/LoginPage";
 import { ProtectedRoute } from "../features/auth/ProtectedRoute";
 
@@ -14,6 +15,7 @@ export function App() {
           <Route element={<Layout />}>
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/graphs/:graphId" element={<GraphEditorPage />} />
             </Route>
             <Route path="/login" element={<LoginPage />} />
           </Route>
