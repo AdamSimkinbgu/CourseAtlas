@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     auth_domain: str = Field(default="", alias="AUTH_DOMAIN")
     auth_audience: str = Field(default="", alias="AUTH_AUDIENCE")
     auth_jwks_url: str = Field(default="", alias="AUTH_JWKS_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
+    supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
 
     model_config = SettingsConfigDict(
         env_file=".env",
