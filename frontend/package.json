@@ -13,25 +13,32 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.75.0",
+    "@tanstack/react-query": "^5.90.2",
+    "ky": "^1.11.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.0",
-    "@types/node": "^20.16.5",
+    "@types/node": "^24.7.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^8.11.0",
     "@typescript-eslint/parser": "^8.11.0",
     "@vitejs/plugin-react-swc": "^3.7.0",
+    "autoprefixer": "^10.4.21",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-prettier": "^5.2.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "jsdom": "^25.0.1",
+    "postcss": "^8.5.6",
     "prettier": "^3.4.2",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.6.2",
     "vite": "^5.4.8",
     "vitest": "^2.1.4"
