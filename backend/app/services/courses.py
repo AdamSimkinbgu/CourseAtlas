@@ -25,6 +25,7 @@ class CourseCreate:
     position_x: float = 0.0
     position_y: float = 0.0
     is_pass_fail: bool = False
+    notes: Optional[str] = None
 
 
 class CourseService:
@@ -48,6 +49,7 @@ class CourseService:
             position_x=payload.position_x,
             position_y=payload.position_y,
             is_pass_fail=payload.is_pass_fail,
+            notes=payload.notes,
         )
         return self.course_repo.create(course)
 
@@ -58,6 +60,38 @@ class CourseService:
     def delete_course(self, course_id: UUID) -> None:
         course = self._get_course_or_error(course_id)
         self.course_repo.delete(course)
+
+    def get_course(self, course_id: UUID) -> Course:
+        return self._get_course_or_error(course_id)
+
+    def list_courses_for_graph(self, graph_id: UUID) -> list[Course]:
+        return self.course_repo.list_by_graph(graph_id)
+
+    def add_courses_bulk(
+        self, graph_id: UUID, payloads: List[CourseCreate]
+    ) -> list[Course]:
+        if self.graph_repo.get(graph_id) is None:
+            raise NotFoundError("Graph not found")
+        courses = [
+            Course(
+                graph_id=graph_id,
+                code=item.code,
+                title=item.title,
+                credits=item.credits,
+                term=item.term,
+                status=item.status,
+                position_x=item.position_x,
+                position_y=item.position_y,
+                is_pass_fail=item.is_pass_fail,
+                notes=item.notes,
+            )
+            for item in payloads
+        ]
+        return self.course_repo.bulk_create(courses)
+
+    def delete_courses_for_graph(self, graph_id: UUID) -> None:
+        for course in self.course_repo.list_by_graph(graph_id):
+            self.course_repo.delete(course)
 
     # Prerequisites --------------------------------------------------------
     def set_prerequisites(self, course_id: UUID, prerequisites: List[dict]) -> Course:

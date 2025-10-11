@@ -44,6 +44,10 @@ class User(TimestampMixin, table=True):
     email: str = Field(sa_column=Column(String(255), unique=True, nullable=False))
     display_name: str = Field(sa_column=Column(String(255), nullable=False))
     avatar_url: Optional[str] = Field(default=None, sa_column=Column(String(1024)))
+    auth_provider_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(255), unique=True, nullable=True),
+    )
 
 
 class Graph(TimestampMixin, table=True):

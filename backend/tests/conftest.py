@@ -1,4 +1,8 @@
 from typing import Generator
+import os
+
+# Ensure tests always have a database URL set before importing application modules.
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 import pytest
 from sqlalchemy import create_engine

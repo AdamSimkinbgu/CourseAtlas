@@ -24,10 +24,32 @@ class UserRepository:
         statement = select(User).where(User.email == email)
         return self.session.exec(statement).first()
 
+    def get_by_provider_id(self, provider_id: str) -> Optional[User]:
+        statement = select(User).where(User.auth_provider_id == provider_id)
+        return self.session.exec(statement).first()
+
+    def update(self, user: User, **data: object) -> User:
+        for key, value in data.items():
+            setattr(user, key, value)
+        self.session.add(user)
+        self.session.flush()
+        self.session.refresh(user)
+        return user
+
     def create(
-        self, *, email: str, display_name: str, avatar_url: Optional[str] = None
+        self,
+        *,
+        email: str,
+        display_name: str,
+        auth_provider_id: str,
+        avatar_url: Optional[str] = None,
     ) -> User:
-        user = User(email=email, display_name=display_name, avatar_url=avatar_url)
+        user = User(
+            email=email,
+            display_name=display_name,
+            avatar_url=avatar_url,
+            auth_provider_id=auth_provider_id,
+        )
         self.session.add(user)
         self.session.flush()
         self.session.refresh(user)

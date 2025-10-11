@@ -16,10 +16,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    database_url: str = Field(
-        default="sqlite:///./course_atlas.db",
-        alias="DATABASE_URL",
-    )
+    database_url: str = Field(alias="DATABASE_URL")
     auth_domain: str = Field(default="", alias="AUTH_DOMAIN")
     auth_audience: str = Field(default="", alias="AUTH_AUDIENCE")
     auth_jwks_url: str = Field(default="", alias="AUTH_JWKS_URL")

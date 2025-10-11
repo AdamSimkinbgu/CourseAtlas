@@ -16,7 +16,11 @@ def create_user(session) -> UUID:
     repo = UserRepository(session)
     service = UserService(repo)
     return service.ensure_user_exists(
-        {"email": f"user-{uuid4()}@example.com", "name": "User"}
+        {
+            "sub": f"supabase|{uuid4()}",
+            "email": f"user-{uuid4()}@example.com",
+            "name": "User",
+        }
     )
 
 

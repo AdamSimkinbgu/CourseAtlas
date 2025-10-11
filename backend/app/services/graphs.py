@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 from uuid import UUID
 
-from app.domain.models import Course, Graph, TemplateMetadata
+from app.domain.models import Course, Graph, TemplateMetadata, Visibility
 from app.exceptions import NotFoundError, PermissionError
 from app.repositories.courses import CourseRepository
 from app.repositories.graphs import GraphRepository
@@ -18,6 +18,7 @@ class GraphCreate:
     title: str
     description: Optional[str] = None
     is_template: bool = False
+    visibility: Optional[Visibility] = None
 
 
 class GraphService:
@@ -34,6 +35,8 @@ class GraphService:
             description=payload.description,
             is_template=payload.is_template,
         )
+        if payload.visibility is not None:
+            graph.visibility = payload.visibility
         return self.graph_repo.create(graph)
 
     def list_graphs(self, owner_id: UUID) -> list[Graph]:
@@ -97,6 +100,54 @@ class GraphService:
             self.course_repo.update(clone_course, prerequisites=translated)
 
         return clone
+
+    def delete_graph(self, graph_id: UUID, *, requesting_user: UUID) -> None:
+        graph = self.get_graph(graph_id, requesting_user=requesting_user)
+        if graph.owner_id != requesting_user:
+            raise PermissionError("Only owner can delete graph")
+        # remove associated courses
+        for course in self.course_repo.list_by_graph(graph.id):
+            self.course_repo.delete(course)
+        self.graph_repo.delete(graph)
+
+    def get_graph_with_courses(
+        self, graph_id: UUID, *, requesting_user: UUID
+    ) -> tuple[Graph, list[Course]]:
+        graph = self.get_graph(graph_id, requesting_user=requesting_user)
+        courses = self.course_repo.list_by_graph(graph.id)
+        return graph, courses
+
+    def export_graph(
+        self, graph_id: UUID, *, requesting_user: UUID
+    ) -> Dict[str, object]:
+        graph, courses = self.get_graph_with_courses(
+            graph_id, requesting_user=requesting_user
+        )
+        return {
+            "graph": {
+                "id": str(graph.id),
+                "title": graph.title,
+                "description": graph.description,
+                "is_template": graph.is_template,
+                "visibility": graph.visibility.value,
+            },
+            "courses": [
+                {
+                    "id": str(course.id),
+                    "code": course.code,
+                    "title": course.title,
+                    "credits": course.credits,
+                    "term": course.term,
+                    "status": course.status.value,
+                    "prerequisites": course.prerequisites,
+                    "grade": str(course.grade) if course.grade is not None else None,
+                    "is_pass_fail": course.is_pass_fail,
+                    "position": {"x": course.position_x, "y": course.position_y},
+                    "notes": course.notes,
+                }
+                for course in courses
+            ],
+        }
 
     def publish_template(
         self, graph_id: UUID, metadata: TemplateMetadata

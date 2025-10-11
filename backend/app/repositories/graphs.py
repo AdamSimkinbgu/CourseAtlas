@@ -55,6 +55,9 @@ class GraphRepository:
         # Courses duplicated externally by CourseRepository
         return clone
 
+    def delete(self, graph: Graph) -> None:
+        self.session.delete(graph)
+
     # Template metadata helpers -------------------------------------------------
     def list_public_templates(self) -> list[Graph]:
         statement = select(Graph).where(Graph.is_template.is_(True))

@@ -28,3 +28,13 @@ class TemplateRepository:
         self.session.flush()
         self.session.refresh(metadata)
         return metadata
+
+    def list_metadata(self) -> list[TemplateMetadata]:
+        statement = select(TemplateMetadata)
+        return list(self.session.exec(statement))
+
+    def get_metadata_for_graph(self, graph_id: UUID) -> Optional[TemplateMetadata]:
+        statement = select(TemplateMetadata).where(
+            TemplateMetadata.graph_id == graph_id
+        )
+        return self.session.exec(statement).first()

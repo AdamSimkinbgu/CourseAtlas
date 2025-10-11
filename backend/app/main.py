@@ -5,10 +5,13 @@ from typing import Dict
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.error_handlers import register_exception_handlers
 from app.api.v1.routes import router as api_router
 from app.core.config import settings
 
 app = FastAPI(title=settings.app_name, docs_url="/docs", openapi_url="/openapi.json")
+
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

@@ -102,7 +102,7 @@ def upgrade() -> None:
         sa.Column(
             "prerequisites",
             sa.JSON(),
-            server_default=sa.text([]),
+            server_default=sa.text("'[]'"),
             nullable=False,
         ),
         sa.Column("grade", sa.Numeric(), nullable=True),

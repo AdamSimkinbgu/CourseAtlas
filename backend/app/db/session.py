@@ -21,4 +21,9 @@ def get_session() -> Generator[Session, None, None]:
     """Provide a transactional scope around a series of operations."""
 
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise

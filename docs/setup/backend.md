@@ -44,13 +44,15 @@ cp .env.example .env
 |----------|-------------|
 | `API_HOST` | Hostname for the FastAPI server (default `127.0.0.1`). |
 | `API_PORT` | Port for local server (default `8000`). |
-| `DATABASE_URL` | Postgres connection string (use local Docker Postgres or Supabase connection). |
+| `DATABASE_URL` | Postgres connection string (Supabase recommended; fallback to local Docker Postgres only for offline dev). |
 | `SUPABASE_PROJECT_URL` | Base URL for Supabase project. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key used for privileged backend calls. |
 | `SUPABASE_ANON_KEY` | Public anon key for verifying JWTs if needed. |
 | `AUTH_DOMAIN` | Issuer domain from Supabase Auth | Auth0. |
 | `AUTH_AUDIENCE` | API audience expected in access tokens. | Auth provider dashboard |
 | `AUTH_JWKS_URL` | JWKS endpoint for fetching signing keys. | Auth provider dashboard |
+
+Supabase access tokens include a stable `sub` claim (e.g., `supabase|user-id`) that the backend stores in `users.auth_provider_id` for future lookups.
 
 Secrets live in 1Password/Bitwarden or the Supabase dashboard. Never commit populated `.env`.
 
@@ -66,11 +68,19 @@ This spins up Postgres 15 with credentials noted inside `docker-compose.yml`. Up
 
 ## 6. Run the API
 
+1. Run migrations against the configured database:
+
+```bash
+alembic upgrade head
+```
+
+2. Start the API server:
+
 ```bash
 uvicorn app.main:app --reload --host "${API_HOST:-127.0.0.1}" --port "${API_PORT:-8000}"
 ```
 
-Visit `http://127.0.0.1:8000/healthz` to confirm the server responds with `{"status": "ok"}`.
+Visit `http://127.0.0.1:8000/healthz` to confirm the server responds with `{"status": "ok"}` and inspect the database to ensure new tables were created.
 
 ## 7. Handy commands
 

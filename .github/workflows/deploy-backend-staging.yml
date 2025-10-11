@@ -1,0 +1,44 @@
+name: Deploy Backend (Staging)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend-staging.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run backend tests
+        working-directory: backend
+        run: pytest
+
+      - name: Trigger Render deployment
+        if: ${{ success() }}
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_BACKEND_STAGING_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "RENDER_BACKEND_STAGING_DEPLOY_HOOK secret is missing."
+            exit 1
+          fi
+          curl -X POST "$RENDER_DEPLOY_HOOK"
