@@ -11,12 +11,21 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "../../app/supabaseClient";
 import { setAccessToken } from "../../lib/api";
+import { api } from "../../lib/api";
+
+type BackendProfile = {
+  id: string;
+  email: string;
+};
 
 type AuthContextValue = {
   supabase: typeof supabase;
   session: Session | null;
   user: User | null;
   loading: boolean;
+  profile: BackendProfile | null;
+  profileLoading: boolean;
+  profileError: string | null;
   signInWithGoogle: (redirectPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -30,6 +39,9 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<BackendProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -49,6 +61,44 @@ export function AuthProvider({ children }: AuthProviderProps) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      setProfileLoading(false);
+      setProfileError(null);
+      return;
+    }
+
+    let isMounted = true;
+    setProfileLoading(true);
+    setProfileError(null);
+
+    void api
+      .get("api/v1/me")
+      .json<BackendProfile>()
+      .then((data) => {
+        if (isMounted) {
+          setProfile(data);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isMounted) {
+          console.error("Failed to fetch backend profile", error);
+          setProfileError(error instanceof Error ? error.message : "Unknown error");
+          setProfile(null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setProfileLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
 
   const signInWithGoogle = useCallback(async (redirectPath = "/") => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -76,10 +126,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       session,
       user: session?.user ?? null,
       loading,
+      profile,
+      profileLoading,
+      profileError,
       signInWithGoogle,
       signOut,
     }),
-    [loading, session, signInWithGoogle, signOut]
+    [loading, profile, profileError, profileLoading, session, signInWithGoogle, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -4,9 +4,11 @@ import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthProvider";
 
 export function Layout() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, profile, profileLoading, profileError } = useAuth();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  const isLoadingAccount = loading || profileLoading;
+  const accountEmail = profile?.email ?? user?.email ?? "";
 
   const handleSignOut = async () => {
     try {
@@ -35,11 +37,16 @@ export function Layout() {
             </ul>
           </nav>
           <div className="flex items-center gap-3 text-sm text-slate-600">
-            {loading ? (
+            {isLoadingAccount ? (
               <span>Loading account...</span>
             ) : user ? (
               <>
-                <span className="hidden sm:inline">{user.email}</span>
+                <span className="hidden sm:inline">
+                  Signed in as {accountEmail || "unknown user"}
+                </span>
+                {profileError && (
+                  <span className="hidden text-xs text-rose-600 sm:inline">{profileError}</span>
+                )}
                 <button
                   type="button"
                   onClick={handleSignOut}
