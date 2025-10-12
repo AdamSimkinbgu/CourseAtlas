@@ -16,6 +16,7 @@ import ReactFlow, {
   Edge,
   MarkerType,
   Position,
+  Handle,
   addEdge,
   ReactFlowProvider,
   useEdgesState,
@@ -71,6 +72,7 @@ type ContainerNodeData = {
   container: ContainerShape;
   onSelect: (containerId: string) => void;
   theme: ThemeMode;
+  courseCount: number;
 };
 
 type ContainerShape = {
@@ -95,14 +97,21 @@ const PALETTE_BY_ID = new Map<string, ContainerPaletteColor>(
   CONTAINER_PALETTE.map((entry) => [entry.id, entry])
 );
 
+const CONTAINER_NODE_SHADOW: Record<ThemeMode, string> = {
+  light: "inset 0 0 0 1px rgba(15,23,42,0.04), 0 20px 55px -32px rgba(15,23,42,0.25)",
+  dark: "inset 0 0 0 1px rgba(148,163,184,0.18), 0 24px 60px -32px rgba(2,6,23,0.85)",
+};
+
 const DEFAULT_CONTAINER_FALLBACK = {
   light: {
     fill: "rgba(203, 213, 225, 0.18)",
     border: "#cbd5e1",
+    shadow: CONTAINER_NODE_SHADOW.light,
   },
   dark: {
     fill: "rgba(148, 163, 184, 0.12)",
     border: "#475569",
+    shadow: CONTAINER_NODE_SHADOW.dark,
   },
 };
 
@@ -144,17 +153,35 @@ const largeSample = largeSampleRaw as SampleGraph;
 function resolveContainerVisuals(
   container: ContainerShape,
   theme: ThemeMode
-): { fill: string; border: string } {
+): { fill: string; border: string; shadow: string } {
   const paletteId = container.palette_id ?? undefined;
   const paletteEntry = paletteId ? PALETTE_BY_ID.get(paletteId) : undefined;
   if (paletteEntry) {
-    return theme === "dark" ? paletteEntry.dark : paletteEntry.light;
+    return theme === "dark"
+      ? {
+          fill: paletteEntry.dark.fill,
+          border: paletteEntry.dark.border,
+          shadow: CONTAINER_NODE_SHADOW.dark,
+        }
+      : {
+          fill: paletteEntry.light.fill,
+          border: paletteEntry.light.border,
+          shadow: CONTAINER_NODE_SHADOW.light,
+        };
   }
   const fallbackFill = container.color;
   if (fallbackFill) {
     return theme === "dark"
-      ? { fill: fallbackFill, border: DEFAULT_CONTAINER_FALLBACK.dark.border }
-      : { fill: fallbackFill, border: DEFAULT_CONTAINER_FALLBACK.light.border };
+      ? {
+          fill: fallbackFill,
+          border: DEFAULT_CONTAINER_FALLBACK.dark.border,
+          shadow: DEFAULT_CONTAINER_FALLBACK.dark.shadow,
+        }
+      : {
+          fill: fallbackFill,
+          border: DEFAULT_CONTAINER_FALLBACK.light.border,
+          shadow: DEFAULT_CONTAINER_FALLBACK.light.shadow,
+        };
   }
   return theme === "dark" ? DEFAULT_CONTAINER_FALLBACK.dark : DEFAULT_CONTAINER_FALLBACK.light;
 }
@@ -181,38 +208,87 @@ function CourseNode({ data }: CourseNodeProps) {
   })();
   const statusToken = themeTokens.status[statusKey];
 
+  const baseShadow =
+    theme === "dark"
+      ? "0 24px 55px -32px rgba(2,6,23,0.85)"
+      : "0 20px 45px -30px rgba(15,23,42,0.28)";
   const haloShadow = isSelected
     ? `0 0 0 4px ${themeTokens.halo.active}`
     : isPrerequisiteHighlight
       ? `0 0 0 3px ${themeTokens.halo.prerequisite}`
       : "none";
+  const combinedShadow = haloShadow === "none" ? baseShadow : `${haloShadow}, ${baseShadow}`;
 
   const displayStatus =
     course.status.charAt(0).toUpperCase() + course.status.slice(1).replace("_", " ");
+  const gradeBadge = course.grade ? Number(course.grade).toFixed(0) : null;
+  const prereqCount = course.prerequisites.length;
+  const metaChips = [
+    `${course.credits} credit${course.credits === 1 ? "" : "s"}`,
+    course.term ? course.term : "Term TBD",
+    course.is_pass_fail ? "Pass / Fail" : "Graded",
+    prereqCount ? `${prereqCount} prereq${prereqCount === 1 ? "" : "s"}` : "No prereqs",
+  ];
 
   return (
     <div
-      className="group w-64 cursor-pointer rounded-xl border p-4 text-left shadow-sm transition"
+      className="group relative w-72 cursor-pointer rounded-2xl border p-5 text-left transition"
       style={{
-        backgroundColor: statusToken.bg,
+        background: `linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.55)) , ${statusToken.bg}`,
         color: statusToken.text,
         borderColor: statusToken.border,
-        boxShadow: haloShadow,
+        boxShadow: combinedShadow,
         opacity: hasUnmetPrereqs && statusKey === "blocked" ? 0.78 : 1,
       }}
       onDoubleClick={() => onSelect(course.id)}
     >
-      <h3 className="text-base font-semibold">{course.code}</h3>
-      <p className="text-sm opacity-90">{course.title}</p>
-      <div className="mt-3 flex items-center justify-between text-xs opacity-75">
-        <span>{course.credits} credits</span>
-        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/90">
-          {displayStatus}
-        </span>
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!h-3 !w-3 !border !border-slate-300 !bg-white shadow-sm dark:!border-slate-600 dark:!bg-slate-950"
+        style={{ top: "50%", transform: "translate(-50%, -50%)" }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!h-3 !w-3 !border !border-slate-300 !bg-white shadow-sm dark:!border-slate-600 dark:!bg-slate-950"
+        style={{ top: "50%", transform: "translate(50%, -50%)" }}
+      />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.32em] text-slate-500/80 dark:text-slate-200/80">
+            {course.code}
+          </span>
+          <h3 className="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">
+            {course.title}
+          </h3>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {gradeBadge ? (
+            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700 shadow-sm dark:bg-slate-900/60 dark:text-slate-100">
+              {gradeBadge}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-white/40 bg-white/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/90 shadow-sm dark:border-slate-500/40 dark:bg-slate-800/70">
+            {displayStatus}
+          </span>
+        </div>
       </div>
-      {hasUnmetPrereqs && (
-        <p className="mt-2 text-xs font-medium">Prerequisites not met — course blocked</p>
-      )}
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
+        {metaChips.map((chip, index) => (
+          <div
+            key={`${chip}-${index}`}
+            className="flex items-center gap-2 rounded-full border border-white/40 bg-white/60 px-2 py-1 shadow-sm dark:border-slate-500/50 dark:bg-slate-900/40"
+          >
+            <span className="font-medium text-slate-700 dark:text-slate-200">{chip}</span>
+          </div>
+        ))}
+      </div>
+      {hasUnmetPrereqs ? (
+        <p className="mt-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+          Prerequisites not met — course blocked
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -220,28 +296,44 @@ function CourseNode({ data }: CourseNodeProps) {
 type ContainerNodeProps = NodeProps<ContainerNodeData>;
 
 function ContainerNode({ data, selected }: ContainerNodeProps) {
-  const { container, onSelect, theme } = data;
+  const { container, onSelect, theme, courseCount } = data;
   const visual = resolveContainerVisuals(container, theme);
+  const gradientOverlay =
+    theme === "dark"
+      ? "linear-gradient(135deg, rgba(248,250,252,0.12), rgba(15,23,42,0.05) 45%, rgba(15,23,42,0) 80%)"
+      : "linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.25) 55%, rgba(255,255,255,0) 85%)";
 
   return (
     <div
-      className="group h-full w-full rounded-xl border shadow-inner transition"
+      className="group relative h-full w-full rounded-3xl border border-dashed transition"
       style={{
-        backgroundColor: visual.fill,
+        background: `${gradientOverlay}, ${visual.fill}`,
         borderColor: visual.border,
-        boxShadow: selected ? `0 0 0 3px ${THEME_TOKENS[theme].halo.active}` : undefined,
+        boxShadow: selected
+          ? `0 0 0 3px ${THEME_TOKENS[theme].halo.active}, ${visual.shadow}`
+          : visual.shadow,
       }}
       onDoubleClick={() => onSelect(container.id)}
     >
       <NodeResizer
-        minWidth={200}
-        minHeight={160}
+        minWidth={280}
+        minHeight={220}
         isVisible={selected}
-        lineClassName="border border-dashed border-slate-400"
-        handleClassName="h-3 w-3 bg-white border border-slate-400 rounded-sm"
+        lineClassName="border border-dashed border-slate-400/50 dark:border-slate-500/40"
+        handleClassName="h-3 w-3 rounded-sm border border-slate-300 bg-white dark:border-slate-500 dark:bg-slate-950"
       />
-      <div className="pointer-events-none p-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-        {container.title}
+      <div className="pointer-events-none flex items-center justify-between px-5 py-4 text-sm font-semibold text-slate-700 dark:text-slate-100">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
+            Container
+          </span>
+          <span className="text-lg font-semibold">{container.title}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-300">
+          <span className="rounded-full border border-current px-2 py-0.5 text-[11px] font-medium uppercase">
+            {courseCount === 1 ? "1 course" : `${courseCount} courses`}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -537,6 +629,19 @@ export function GraphEditorPage() {
     setCourseAssignments(initialAssignments);
     assignmentsRef.current = initialAssignments;
 
+    const membersByContainer = new Map<string, CourseDetail[]>();
+    const coursesList = detailQuery.data.courses;
+    for (const course of coursesList) {
+      const containerId = courseAssignments[course.id];
+      if (!containerId) continue;
+      const list = membersByContainer.get(containerId);
+      if (list) {
+        list.push(course);
+      } else {
+        membersByContainer.set(containerId, [course]);
+      }
+    }
+
     const containerNodes: Node<ContainerNodeData>[] = detailQuery.data.graph.containers.map(
       (container) => {
         const normalized: ContainerShape = {
@@ -561,6 +666,7 @@ export function GraphEditorPage() {
             container: normalized,
             onSelect: openInspectorForContainer,
             theme,
+            courseCount: membersByContainer.get(container.id)?.length ?? 0,
           },
           style: {
             width: normalized.width,
@@ -637,6 +743,7 @@ export function GraphEditorPage() {
     futureRef.current = [];
     pushHistory();
   }, [
+    courseAssignments,
     detailQuery.data,
     openInspectorForContainer,
     openInspectorForCourse,
@@ -1107,9 +1214,14 @@ export function GraphEditorPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        handleDeleteSelection();
+      // if (event.key === "Delete") {  // causes backspace to close menus instead of deleting
+      //   event.preventDefault();
+      //   handleDeleteSelection();
+      // }
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+        setIsDetailBubbleOpen(false);
+        setIsGraphActionsOpen(false);
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
@@ -1244,24 +1356,24 @@ export function GraphEditorPage() {
     : 0;
   const infoBubbleClasses =
     theme === "dark"
-      ? "rounded-2xl border border-slate-700/70 bg-slate-950/80 px-5 py-4 text-slate-100 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.85)] backdrop-blur"
-      : "rounded-2xl border border-slate-200 bg-white/95 px-5 py-4 text-slate-900 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.2)] backdrop-blur";
+      ? "rounded-2xl border border-emerald-400/50 bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.18),rgba(15,23,42,0.85))] px-5 py-4 text-slate-50 shadow-[0_24px_70px_-30px_rgba(15,23,42,0.9)] backdrop-blur"
+      : "rounded-2xl border border-emerald-300 bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.12),white)] px-5 py-4 text-slate-900 shadow-[0_24px_60px_-35px_rgba(15,23,42,0.18)] backdrop-blur";
   const menuButtonClasses =
     theme === "dark"
-      ? "rounded-2xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-slate-300 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.7)] transition"
-      : "rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-slate-600 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.2)] transition";
+      ? "rounded-2xl border border-slate-700/70 bg-slate-900/80 px-3 py-2 text-slate-200 shadow-[0_12px_36px_-25px_rgba(15,23,42,0.75)] transition hover:bg-slate-900"
+      : "rounded-2xl border border-slate-200 bg-white px-3 py-2 text-slate-600 shadow-[0_12px_36px_-25px_rgba(15,23,42,0.18)] transition hover:bg-slate-50";
   const menuPanelClasses =
     theme === "dark"
-      ? "absolute left-full top-0 ml-3 w-52 rounded-2xl border border-slate-800/70 bg-slate-950/90 p-3 text-slate-100 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.85)]"
-      : "absolute left-full top-0 ml-3 w-52 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.25)]";
+      ? "absolute left-full top-0 ml-3 w-52 rounded-2xl border border-slate-800/60 bg-slate-950/85 p-3 text-slate-100 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.88)]"
+      : "absolute left-full top-0 ml-3 w-52 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.22)]";
   const graphActionsButtonClasses =
     theme === "dark"
-      ? "rounded-full border border-slate-700/70 bg-slate-950/70 px-4 py-2 text-sm font-semibold text-slate-200 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.8)] transition hover:bg-slate-900"
-      : "rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.2)] transition hover:bg-white";
+      ? "rounded-full border border-blue-400/40 bg-[linear-gradient(135deg,rgba(59,130,246,0.28),rgba(59,130,246,0.1))] px-4 py-2 text-sm font-semibold text-slate-50 shadow-[0_25px_60px_-35px_rgba(30,64,175,0.7)] transition hover:bg-[rgba(59,130,246,0.32)]"
+      : "rounded-full border border-blue-300 bg-[linear-gradient(135deg,rgba(59,130,246,0.18),white)] px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_20px_50px_-30px_rgba(30,64,175,0.25)] transition hover:bg-[rgba(191,219,254,0.45)]";
   const graphActionPanelClasses =
     theme === "dark"
-      ? "flex flex-col gap-2 rounded-2xl border border-slate-700/70 bg-slate-950/80 p-3 text-sm text-slate-100 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.85)] backdrop-blur"
-      : "flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-3 text-sm text-slate-700 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.25)] backdrop-blur";
+      ? "flex flex-col gap-2 rounded-2xl border border-slate-700/60 bg-slate-950/85 p-3 text-sm text-slate-100 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.9)] backdrop-blur"
+      : "flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.24)] backdrop-blur";
   const menuItemClasses =
     theme === "dark"
       ? "w-full rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-900/70 focus:outline-none"
@@ -1479,6 +1591,25 @@ export function GraphEditorPage() {
     ]
   );
 
+  const handleNodeDoubleClick = useCallback(
+    (_event: unknown, node: Node<EditorNodeData>) => {
+      if (node.type === "course") {
+        openInspectorForCourse(node.id);
+      } else if (node.type === "container") {
+        openInspectorForContainer(node.id);
+      } else {
+        return;
+      }
+      setIsMenuOpen(false);
+      if (isLargeViewport) {
+        setIsDetailBubbleOpen(true);
+      } else {
+        setIsInspectorOpen(true);
+      }
+    },
+    [isLargeViewport, openInspectorForContainer, openInspectorForCourse]
+  );
+
   return (
     <div className="flex h-full min-h-[calc(100vh-4rem)] flex-col gap-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-0 py-6 text-slate-100 sm:gap-6">
       <button
@@ -1517,6 +1648,7 @@ export function GraphEditorPage() {
                 onEdgesChange={handleEdgesChange}
                 onSelectionChange={handleSelectionChange}
                 onNodeDragStop={handleNodeDragStop}
+                onNodeDoubleClick={handleNodeDoubleClick}
                 onConnect={handleConnect}
                 onEdgesDelete={handleEdgesDelete}
                 onReady={(instance) => {
@@ -1655,6 +1787,7 @@ type GraphEditorCanvasProps = {
   onEdgesChange: ReturnType<typeof useEdgesState>[2];
   onSelectionChange: (params: OnSelectionChangeParams) => void;
   onNodeDragStop: (event: unknown, node: Node<EditorNodeData>) => void;
+  onNodeDoubleClick: (event: unknown, node: Node<EditorNodeData>) => void;
   onConnect: (connection: Connection) => void;
   onEdgesDelete: (edges: Edge[]) => void;
   onReady: (instance: ReactFlowInstance) => void;
@@ -1669,6 +1802,7 @@ function GraphEditorCanvas({
   onEdgesChange,
   onSelectionChange,
   onNodeDragStop,
+  onNodeDoubleClick,
   onConnect,
   onEdgesDelete,
   onReady,
@@ -1690,6 +1824,7 @@ function GraphEditorCanvas({
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
         onNodeDragStop={onNodeDragStop}
+        onNodeDoubleClick={onNodeDoubleClick}
         onConnect={onConnect}
         onEdgesDelete={onEdgesDelete}
         nodeTypes={nodeTypes}
@@ -2225,7 +2360,13 @@ function ContainerSidePanel({
                   ? "border-brand ring-2 ring-brand/50"
                   : "border-slate-300 dark:border-slate-600"
               }`}
-              style={{ background: theme === "dark" ? entry.dark.fill : entry.light.fill }}
+              style={{
+                background: theme === "dark" ? entry.dark.fill : entry.light.fill,
+                boxShadow:
+                  theme === "dark"
+                    ? "inset 0 0 0 1px rgba(148,163,184,0.15), 0 18px 40px -32px rgba(15,23,42,0.9)"
+                    : "inset 0 0 0 1px rgba(15,23,42,0.06), 0 18px 40px -32px rgba(15,23,42,0.28)",
+              }}
               title={entry.label}
             />
           ))}
@@ -2233,11 +2374,23 @@ function ContainerSidePanel({
       </div>
 
       <div
-        className="flex items-center justify-between rounded-lg border border-dashed border-slate-300 bg-white/40 p-3 text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-400"
-        style={{ background: previewVisual.fill, borderColor: previewVisual.border }}
+        className="overflow-hidden rounded-2xl border p-4 shadow-sm transition"
+        style={{
+          background: previewVisual.fill,
+          borderColor: previewVisual.border,
+          boxShadow:
+            theme === "dark"
+              ? DEFAULT_CONTAINER_FALLBACK.dark.shadow
+              : DEFAULT_CONTAINER_FALLBACK.light.shadow,
+        }}
       >
-        <span>Preview</span>
-        <span>{title}</span>
+        <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-300">
+          <span>Preview</span>
+          <span className="rounded-full border border-white/40 px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/80">
+            {title || "Untitled"}
+          </span>
+        </div>
+        <div className="mt-3 h-20 rounded-xl border border-dashed border-white/30 bg-white/5 dark:border-slate-500/40 dark:bg-white/5" />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">

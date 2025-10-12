@@ -14,6 +14,9 @@ export function Layout() {
   const contentContainerClass = isGraphEditorRoute
     ? "w-full px-4 sm:px-6"
     : "mx-auto max-w-4xl px-6";
+  const mainPaddingClass = isGraphEditorRoute
+    ? `${contentContainerClass} pt-0 pb-8 sm:pt-0 sm:pb-10`
+    : `${contentContainerClass} py-8 sm:py-10`;
 
   const handleSignOut = async () => {
     try {
@@ -72,7 +75,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main className={`${contentContainerClass} py-8 sm:py-10`}>
+      <main className={mainPaddingClass}>
         <Outlet />
       </main>
     </div>
