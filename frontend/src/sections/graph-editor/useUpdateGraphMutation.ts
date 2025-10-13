@@ -28,7 +28,6 @@ export function useUpdateGraphMutation(graphId: string) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["graph", graphId] });
       queryClient.invalidateQueries({ queryKey: ["graphs"] });
     },
   });

@@ -25,8 +25,16 @@ export function useUpdateCourseMutation(graphId: string) {
   return useMutation({
     mutationFn: ({ courseId, data }: { courseId: string; data: UpdateCoursePayload }) =>
       updateCourse(courseId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["graph", graphId] });
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["graph", graphId], (previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          courses: previous.courses.map((course) =>
+            course.id === updated.id ? { ...course, ...updated } : course
+          ),
+        };
+      });
     },
   });
 }

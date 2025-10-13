@@ -63,7 +63,7 @@ body.dark .course-node {
 .course-node__header {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.8rem;
   padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.25));
@@ -74,16 +74,51 @@ body.dark .course-node__header {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(17, 23, 34, 0.1));
 }
 
+.course-node__title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.course-node__titlepill {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  color: inherit;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  text-align: center;
+  align-self: flex-start;
+}
+
+body.dark .course-node__titlepill {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
 .course-node__codepill {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.28em;
+  align-self: flex-start;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(255, 255, 255, 0.75);
   color: #475569;
+  text-align: center;
 }
 
 body.dark .course-node__codepill {
@@ -97,17 +132,6 @@ body.dark .course-node__codepill {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-}
-
-.course-node__title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.25;
-  color: inherit;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .course-node__header-meta {

@@ -38,6 +38,7 @@ import {
   type CourseDetail,
   type CoursePrerequisite,
   type CourseStatus,
+  type GraphDetail,
   useGraphDetailQuery,
 } from "../sections/graph-editor/useGraphDetailQuery";
 import { useCreateCourseMutation } from "../sections/graph-editor/useCreateCourseMutation";
@@ -46,6 +47,7 @@ import { useUpdatePrerequisitesMutation } from "../sections/graph-editor/useUpda
 import { useDeleteCourseMutation } from "../sections/graph-editor/useDeleteCourseMutation";
 import { useUpdateGraphMutation } from "../sections/graph-editor/useUpdateGraphMutation";
 import { Skeleton } from "../components/Skeleton";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CONTAINER_PALETTE,
   GRADE_PASS_THRESHOLD,
@@ -184,6 +186,32 @@ type SampleGraph = {
 const smallSample = smallSampleRaw as SampleGraph;
 const largeSample = largeSampleRaw as SampleGraph;
 
+type ImportPrerequisitePayload = { course_id: string; condition: string | null };
+type ImportCoursePayload = {
+  id: string;
+  code: string;
+  title: string;
+  credits: number;
+  term: string | null;
+  status: CourseStatus;
+  grade: number | null;
+  is_pass_fail: boolean;
+  position: { x: number; y: number };
+  notes: string | null;
+  prerequisites: ImportPrerequisitePayload[];
+};
+
+function cloneGraphDetail(detail: GraphDetail): GraphDetail {
+  return {
+    graph: {
+      ...detail.graph,
+      containers: detail.graph.containers.map((container) => ({ ...container })),
+      container_assignments: { ...detail.graph.container_assignments },
+    },
+    courses: detail.courses.map((course) => ({ ...course })),
+  };
+}
+
 function resolveContainerVisuals(
   container: ContainerShape,
   theme: ThemeMode
@@ -315,16 +343,18 @@ function CourseNode({ data }: CourseNodeProps) {
         }}
       />
       <div className="course-node__header">
-        <span className="course-node__codepill" title={course.code}>
-          {course.code}
-        </span>
+        <div className="course-node__title-stack">
+          <span className="course-node__titlepill" title={course.title}>
+            {course.title.length === 0 ? "No title" : course.title}
+          </span>
+          <span className="course-node__codepill" title={course.code}>
+            {course.code}
+          </span>
+        </div>
         <span
           className="course-node__dot"
           style={{ background: accentColor, boxShadow: `0 0 0 2px ${withAlpha(accentColor, 0.35)}` }}
         />
-        <h3 className="course-node__title" title={course.title}>
-          {course.title}
-        </h3>
         <div className="course-node__header-meta">
           {gradeBadge ? <span className="course-node__grade">{gradeBadge}</span> : null}
           <span className="course-node__status" style={statusChipStyle}>
@@ -409,6 +439,18 @@ function randomId() {
     : `id-${Date.now()}-${Math.random()}`;
 }
 
+function generateUuid() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  const template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
+  return template.replace(/[xy]/g, (char) => {
+    const rand = Math.floor(Math.random() * 16);
+    const value = char === "x" ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 function cloneNodes(nodes: Node<EditorNodeData>[]): Node<EditorNodeData>[] {
   return nodes.map((node) => ({
     ...node,
@@ -425,6 +467,7 @@ function cloneEdges(edges: Edge[]): Edge[] {
 export function GraphEditorPage() {
   const { graphId } = useParams<{ graphId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const detailQuery = useGraphDetailQuery(graphId ?? "");
   const updateCourseMutation = useUpdateCourseMutation(graphId ?? "");
   const updatePrerequisitesMutation = useUpdatePrerequisitesMutation(graphId ?? "");
@@ -473,6 +516,34 @@ export function GraphEditorPage() {
   const edgesRef = useRef<Edge[]>([]);
   const assignmentsRef = useRef<Record<string, string>>(courseAssignments);
   const containerPersistTimeoutRef = useRef<number | null>(null);
+  const graphMutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  const updateGraphCache = useCallback(
+    (updater: (draft: GraphDetail) => void) => {
+      if (!graphId) return () => {};
+      const key = ["graph", graphId] as const;
+      const previous = queryClient.getQueryData<GraphDetail>(key);
+      if (!previous) return () => {};
+      const draft = cloneGraphDetail(previous);
+      updater(draft);
+      queryClient.setQueryData(key, draft);
+      return () => queryClient.setQueryData(key, previous);
+    },
+    [graphId, queryClient]
+  );
+
+  const enqueueGraphMutation = useCallback(
+    (task: () => Promise<void>) => {
+      graphMutationQueueRef.current = graphMutationQueueRef.current
+        .catch(() => undefined)
+        .then(task);
+      return graphMutationQueueRef.current.catch((error) => {
+        console.error("Graph mutation failed", error);
+        throw error;
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -588,12 +659,19 @@ export function GraphEditorPage() {
   const flushContainerPersistence = useCallback(async () => {
     if (!graphId) return;
     const serialized = serializeContainersFromNodes();
-    try {
-      await updateGraphMutation.mutateAsync({ containers: serialized });
-    } catch (error) {
-      console.error("Failed to persist containers", error);
-    }
-  }, [graphId, serializeContainersFromNodes, updateGraphMutation]);
+    const rollback = updateGraphCache((draft) => {
+      draft.graph.containers = serialized.map((container) => ({ ...container }));
+    });
+    await enqueueGraphMutation(async () => {
+      try {
+        await updateGraphMutation.mutateAsync({ containers: serialized });
+      } catch (error) {
+        console.error("Failed to persist containers", error);
+        rollback();
+        throw error;
+      }
+    });
+  }, [enqueueGraphMutation, graphId, serializeContainersFromNodes, updateGraphCache, updateGraphMutation]);
 
   const scheduleContainerPersistence = useCallback(() => {
     if (containerPersistTimeoutRef.current !== null) {
@@ -606,8 +684,32 @@ export function GraphEditorPage() {
     }, 300);
   }, [flushContainerPersistence]);
 
+  const enqueueCoursePositionUpdate = useCallback(
+    (courseId: string, position: { x: number; y: number }) => {
+      const rollback = updateGraphCache((draft) => {
+        const target = draft.courses.find((course) => course.id === courseId);
+        if (target) {
+          target.position_x = position.x;
+          target.position_y = position.y;
+        }
+      });
+      return enqueueGraphMutation(async () => {
+        try {
+          await updateCourseMutation.mutateAsync({
+            courseId,
+            data: { position },
+          });
+        } catch (error) {
+          rollback();
+          throw error;
+        }
+      });
+    },
+    [enqueueGraphMutation, updateCourseMutation, updateGraphCache]
+  );
+
   const persistAssignments = useCallback(
-    (assignments: Record<string, string>) => {
+    async (assignments: Record<string, string>) => {
       if (!graphId) return;
       const sanitized: Record<string, string> = {};
       const validCourseIds = new Set(
@@ -622,9 +724,20 @@ export function GraphEditorPage() {
           sanitized[courseId] = containerId;
         }
       }
-      updateGraphMutation.mutate({ container_assignments: sanitized });
+      const rollback = updateGraphCache((draft) => {
+        draft.graph.container_assignments = { ...sanitized };
+      });
+      await enqueueGraphMutation(async () => {
+        try {
+          await updateGraphMutation.mutateAsync({ container_assignments: sanitized });
+        } catch (error) {
+          console.error("Failed to persist assignments", error);
+          rollback();
+          throw error;
+        }
+      });
     },
-    [graphId, updateGraphMutation]
+    [enqueueGraphMutation, graphId, updateGraphMutation, updateGraphCache]
   );
 
   const normaliseContainers = useCallback(
@@ -644,34 +757,69 @@ export function GraphEditorPage() {
   );
 
   const normaliseCourses = useCallback((courses: SampleGraphCourse[] | undefined) => {
-    const allowedStatuses: StatusKey[] = ["planned", "completed", "failed", "blocked"];
-    return (courses ?? []).map((course) => {
+    const allowedStatuses: CourseStatus[] = ["planned", "completed", "failed"];
+    const idMap = new Map<string, string>();
+
+    type PendingCourse = {
+      originalId: string;
+      course: ImportCoursePayload & {
+        prerequisites: Array<{ course_id: string; condition?: string | null }>;
+      };
+    };
+
+    const pending: PendingCourse[] = (courses ?? []).map((course) => {
+      const originalId = course.id ?? course.code ?? generateUuid();
+      const uuid = generateUuid();
+      idMap.set(originalId, uuid);
+
       const rawStatus = typeof course.status === "string" ? course.status.toLowerCase() : "planned";
-      const status = allowedStatuses.includes(rawStatus as StatusKey)
+      const status = allowedStatuses.includes(rawStatus as CourseStatus)
         ? (rawStatus as CourseStatus)
-        : ("planned" as CourseStatus);
+        : "planned";
       const gradeValue = course.grade;
-      const grade =
+      const numericGrade =
         gradeValue === null || gradeValue === undefined || gradeValue === ""
           ? null
           : Number(gradeValue);
+
       return {
-        id: course.id ?? undefined,
-        code: course.code,
-        title: course.title,
-        credits: Number(course.credits ?? 0),
-        term: course.term ?? null,
-        status,
-        grade: Number.isFinite(grade) ? grade : null,
-        is_pass_fail: Boolean(course.is_pass_fail),
-        position: {
-          x: Number(course.position?.x ?? 0),
-          y: Number(course.position?.y ?? 0),
+        originalId,
+        course: {
+          id: uuid,
+          code: course.code,
+          title: course.title,
+          credits: Math.max(0, Math.round(Number(course.credits ?? 0))),
+          term: course.term ?? null,
+          status,
+          grade: Number.isFinite(numericGrade) ? Number(numericGrade) : null,
+          is_pass_fail: Boolean(course.is_pass_fail),
+          position: {
+            x: Number(course.position?.x ?? 0),
+            y: Number(course.position?.y ?? 0),
+          },
+          notes: course.notes ?? null,
+          prerequisites: Array.isArray(course.prerequisites) ? course.prerequisites : [],
         },
-        notes: course.notes ?? null,
-        prerequisites: Array.isArray(course.prerequisites) ? course.prerequisites : [],
       };
     });
+
+    pending.forEach((entry) => {
+      entry.course.prerequisites = entry.course.prerequisites
+        .map((item) => {
+          const sourceId = typeof item?.course_id === "string" ? idMap.get(item.course_id) : undefined;
+          if (!sourceId) return null;
+          return {
+            course_id: sourceId,
+            condition: item?.condition ?? null,
+          };
+        })
+        .filter(Boolean) as Array<{ course_id: string; condition: string | null }>;
+    });
+
+    return {
+      courses: pending.map((entry) => entry.course as ImportCoursePayload),
+      idMap,
+    };
   }, []);
 
   const submitImportPayload = useCallback(
@@ -679,7 +827,7 @@ export function GraphEditorPage() {
       replace_existing: boolean;
       containers: ReturnType<typeof normaliseContainers>;
       container_assignments: Record<string, string>;
-      courses: ReturnType<typeof normaliseCourses>;
+      courses: ImportCoursePayload[];
     }) => {
       if (!graphId) return;
       await api.post(`api/v1/graphs/${graphId}/import`, {
@@ -695,21 +843,42 @@ export function GraphEditorPage() {
   const applySampleGraph = useCallback(
     async (sample: SampleGraph) => {
       if (!graphId) return;
-      try {
-        setIsImporting(true);
-        const payload = {
-          replace_existing: true,
-          containers: normaliseContainers(sample.graph?.containers),
-          container_assignments: sample.graph?.container_assignments ?? {},
-          courses: normaliseCourses(sample.courses),
-        };
-        await submitImportPayload(payload);
-      } catch (error) {
+    try {
+      setIsImporting(true);
+      const { courses, idMap } = normaliseCourses(sample.courses);
+      const containers = normaliseContainers(sample.graph?.containers);
+      const rawAssignments = sample.graph?.container_assignments ?? {};
+      const assignments: Record<string, string> = {};
+      Object.entries(rawAssignments).forEach(([courseId, containerId]) => {
+        const mappedId = idMap.get(courseId);
+        if (mappedId) {
+          assignments[mappedId] = containerId;
+        }
+      });
+
+      const payload = {
+        replace_existing: true,
+        containers,
+        container_assignments: assignments,
+        courses,
+      };
+      await submitImportPayload(payload);
+    } catch (error) {
+      if (error && typeof error === "object" && "response" in error) {
+        const response = (error as { response: Response }).response;
+        try {
+          const detail = await response.json();
+          console.error("Failed to apply sample graph", detail);
+        } catch {
+          console.error("Failed to apply sample graph", error);
+        }
+      } else {
         console.error("Failed to apply sample graph", error);
-        alert("Unable to load sample graph. Please try again.");
-      } finally {
-        setIsImporting(false);
       }
+      alert("Unable to load sample graph. Please try again.");
+    } finally {
+      setIsImporting(false);
+    }
     },
     [graphId, normaliseContainers, normaliseCourses, submitImportPayload]
   );
@@ -774,7 +943,6 @@ export function GraphEditorPage() {
       }
     );
     const courses = detailQuery.data.courses;
-
     const selectedCourse = courses.find((course) => course.id === selectedCourseId);
     const prerequisiteSet = new Set(
       selectedCourse?.prerequisites.map((item) => item.course_id) ?? []
@@ -911,7 +1079,7 @@ export function GraphEditorPage() {
         setNodes(previous.nodes);
         setEdges(previous.edges);
         setTimeout(() => {
-          persistAssignments(previous.assignments);
+          void persistAssignments(previous.assignments);
           scheduleContainerPersistence();
         }, 0);
       },
@@ -931,7 +1099,7 @@ export function GraphEditorPage() {
         setNodes(next.nodes);
         setEdges(next.edges);
         setTimeout(() => {
-          persistAssignments(next.assignments);
+          void persistAssignments(next.assignments);
           scheduleContainerPersistence();
         }, 0);
       },
@@ -953,22 +1121,10 @@ export function GraphEditorPage() {
         return;
       }
       const { id, position } = node;
-      try {
-        await updateCourseMutation.mutateAsync({
-          courseId: id,
-          data: {
-            position: {
-              x: position.x,
-              y: position.y,
-            },
-          },
-        });
-        setTimeout(() => pushHistory(), 0);
-      } catch (error) {
-        console.error("Failed to persist position", error);
-      }
+      enqueueCoursePositionUpdate(id, { x: position.x, y: position.y });
+      setTimeout(() => pushHistory(), 0);
     },
-    [flushContainerPersistence, pushHistory, updateCourseMutation]
+    [enqueueCoursePositionUpdate, flushContainerPersistence, pushHistory]
   );
 
   const handleConnect = useCallback(
@@ -1033,7 +1189,7 @@ export function GraphEditorPage() {
         } else {
           next[courseId] = containerId;
         }
-        persistAssignments(next);
+        void persistAssignments(next);
         return next;
       });
       setNodes((nds) =>
@@ -1149,7 +1305,7 @@ export function GraphEditorPage() {
               delete next[courseId];
             }
           });
-          persistAssignments(next);
+          void persistAssignments(next);
           return next;
         });
         setNodes((nds) => nds.filter((candidate) => candidate.id !== containerId));
