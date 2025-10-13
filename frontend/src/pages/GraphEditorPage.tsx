@@ -41,6 +41,7 @@ import {
   type GraphDetail,
   useGraphDetailQuery,
 } from "../sections/graph-editor/useGraphDetailQuery";
+import { GraphSelectionProvider, useGraphSelection } from "../sections/graph-editor/useGraphSelection";
 import { useCreateCourseMutation } from "../sections/graph-editor/useCreateCourseMutation";
 import { useUpdateCourseMutation } from "../sections/graph-editor/useUpdateCourseMutation";
 import { useUpdatePrerequisitesMutation } from "../sections/graph-editor/useUpdatePrerequisitesMutation";
@@ -431,6 +432,24 @@ const nodeTypes = {
   container: ContainerNode,
 };
 
+const EMPTY_ASSIGNMENTS: Record<string, string> = {};
+
+function assignmentsEqual(
+  current: Record<string, string>,
+  incoming: Record<string, string>
+): boolean {
+  if (current === incoming) return true;
+  const currentKeys = Object.keys(current);
+  const incomingKeys = Object.keys(incoming);
+  if (currentKeys.length !== incomingKeys.length) return false;
+  for (const key of currentKeys) {
+    if (current[key] !== incoming[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const THEME_STORAGE_KEY = "course-atlas-theme";
 
 function randomId() {
@@ -464,7 +483,7 @@ function cloneEdges(edges: Edge[]): Edge[] {
   return edges.map((edge) => ({ ...edge }));
 }
 
-export function GraphEditorPage() {
+function GraphEditorPageInner() {
   const { graphId } = useParams<{ graphId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -494,18 +513,30 @@ export function GraphEditorPage() {
 
   const initialViewportIsLarge =
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 1024px)").matches;
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  const selection = useGraphSelection();
   const [isAddCourseOpen, setIsAddCourseOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLargeViewport, setIsLargeViewport] = useState(initialViewportIsLarge);
-  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
-  const [isDetailBubbleOpen, setIsDetailBubbleOpen] = useState(initialViewportIsLarge);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGraphActionsOpen, setIsGraphActionsOpen] = useState(false);
+  const {
+    courses: selectedCourseIds,
+    containers: selectedContainerIds,
+    edges: selectedEdgeIds,
+    detailTarget,
+    isDetailOpen,
+    totals: selectionTotals,
+    lastClicked: lastClickedTarget,
+    rememberClick,
+    toggleDetail: toggleSelectionDetail,
+    openDetail: openSelectionDetail,
+    openAggregateDetail,
+    closeDetail: closeSelectionDetail,
+    select: applySelection,
+    clear: clearSelection,
+  } = selection;
 
   const [courseAssignments, setCourseAssignments] = useState<Record<string, string>>({});
 
@@ -567,43 +598,28 @@ export function GraphEditorPage() {
 
   const openInspectorForCourse = useCallback(
     (courseId: string) => {
-      setSelectedCourseId(courseId);
-      setSelectedContainerId(null);
-      if (!isLargeViewport) {
-        setIsInspectorOpen(true);
-      }
+      openSelectionDetail("course", courseId);
     },
-    [isLargeViewport]
+    [openSelectionDetail]
   );
 
   const openInspectorForContainer = useCallback(
     (containerId: string) => {
-      setSelectedContainerId(containerId);
-      setSelectedCourseId(null);
-      if (!isLargeViewport) {
-        setIsInspectorOpen(true);
-      }
+      openSelectionDetail("container", containerId);
     },
-    [isLargeViewport]
+    [openSelectionDetail]
   );
 
   const closeInspector = useCallback(() => {
-    setSelectedCourseId(null);
-    setSelectedContainerId(null);
     setIsMenuOpen(false);
-    setIsDetailBubbleOpen(false);
-    if (!isLargeViewport) {
-      setIsInspectorOpen(false);
-    }
-  }, [isLargeViewport]);
+    clearSelection();
+  }, [clearSelection]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
     const applyViewport = (matches: boolean) => {
       setIsLargeViewport(matches);
-      setIsInspectorOpen(false);
-      setIsDetailBubbleOpen(matches);
     };
     applyViewport(mediaQuery.matches);
     const listener = (event: MediaQueryListEvent) => {
@@ -616,15 +632,14 @@ export function GraphEditorPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedCourseId && !selectedContainerId) {
+    if (
+      selectedCourseIds.length === 0 &&
+      selectedContainerIds.length === 0 &&
+      selectedEdgeIds.length === 0
+    ) {
       setIsMenuOpen(false);
-      if (!isLargeViewport) {
-        setIsDetailBubbleOpen(false);
-      }
-    } else if (isLargeViewport) {
-      setIsDetailBubbleOpen(true);
     }
-  }, [isLargeViewport, selectedContainerId, selectedCourseId]);
+  }, [selectedCourseIds.length, selectedContainerIds.length, selectedEdgeIds.length]);
 
   const pushHistory = useCallback(() => {
     const snapshot: HistoryEntry = {
@@ -890,14 +905,19 @@ export function GraphEditorPage() {
       return;
     }
 
-    const initialAssignments = detailQuery.data.graph.container_assignments ?? {};
-    setCourseAssignments(initialAssignments);
-    assignmentsRef.current = initialAssignments;
+    const initialAssignments =
+      detailQuery.data.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
+    if (!assignmentsEqual(courseAssignments, initialAssignments)) {
+      setCourseAssignments(initialAssignments);
+      assignmentsRef.current = initialAssignments;
+    } else {
+      assignmentsRef.current = courseAssignments;
+    }
 
     const membersByContainer = new Map<string, CourseDetail[]>();
     const coursesList = detailQuery.data.courses;
     for (const course of coursesList) {
-      const containerId = courseAssignments[course.id];
+      const containerId = initialAssignments[course.id];
       if (!containerId) continue;
       const list = membersByContainer.get(containerId);
       if (list) {
@@ -939,14 +959,11 @@ export function GraphEditorPage() {
           },
           draggable: true,
           selectable: true,
+          selected: false,
         } satisfies Node<ContainerNodeData>;
       }
     );
     const courses = detailQuery.data.courses;
-    const selectedCourse = courses.find((course) => course.id === selectedCourseId);
-    const prerequisiteSet = new Set(
-      selectedCourse?.prerequisites.map((item) => item.course_id) ?? []
-    );
 
     const courseNodes: Node<CourseNodeData>[] = courses.map((course) => {
       const assignments = initialAssignments;
@@ -969,14 +986,15 @@ export function GraphEditorPage() {
           hasUnmetPrereqs,
           onSelect: openInspectorForCourse,
           theme,
-          isSelected: selectedCourseId === course.id,
-          isPrerequisiteHighlight: prerequisiteSet.has(course.id),
+          isSelected: false,
+          isPrerequisiteHighlight: false,
         },
         parentNode: parent,
         extent: parent ? "parent" : undefined,
         style: { zIndex: 1 },
         draggable: true,
         selectable: true,
+        selected: false,
         sourcePosition: Position.Bottom,
         targetPosition: Position.Top,
       };
@@ -1002,22 +1020,76 @@ export function GraphEditorPage() {
       });
     });
 
-    setNodes([...containerNodes, ...courseNodes]);
-    setEdges(edgesList);
-    historyRef.current = [];
-    futureRef.current = [];
-    pushHistory();
-  }, [
-    courseAssignments,
-    detailQuery.data,
-    openInspectorForContainer,
-    openInspectorForCourse,
-    pushHistory,
-    selectedCourseId,
-    setEdges,
-    setNodes,
-    theme,
-  ]);
+  const nextNodes = [...containerNodes, ...courseNodes];
+  setNodes(nextNodes);
+  setEdges(edgesList);
+  historyRef.current = [];
+  futureRef.current = [];
+  pushHistory();
+}, [
+  courseAssignments,
+  detailQuery.data,
+  pushHistory,
+  setEdges,
+  setNodes,
+  theme,
+]);
+
+  useEffect(() => {
+    if (!detailQuery.data) return;
+
+    const primarySelectedCourseId =
+      selectedCourseIds.length === 1 && selectedContainerIds.length === 0
+        ? selectedCourseIds[0]
+        : null;
+    const selectedCourseDetail = primarySelectedCourseId
+      ? detailQuery.data.courses.find((course) => course.id === primarySelectedCourseId) ?? null
+      : null;
+    const prerequisiteSet = new Set(
+      selectedCourseDetail?.prerequisites.map((item) => item.course_id) ?? []
+    );
+
+    setNodes((prevNodes) => {
+      let changed = false;
+      const updated = prevNodes.map((node) => {
+        if (node.type === "course") {
+          const data = node.data as CourseNodeData;
+          const isSelected = selectedCourseIds.includes(node.id);
+          const isPrereqHighlight = primarySelectedCourseId ? prerequisiteSet.has(node.id) : false;
+          if (
+            data.isSelected === isSelected &&
+            data.isPrerequisiteHighlight === isPrereqHighlight &&
+            node.selected === isSelected
+          ) {
+            return node;
+          }
+          changed = true;
+          return {
+            ...node,
+            selected: isSelected,
+            data: {
+              ...data,
+              isSelected,
+              isPrerequisiteHighlight: isPrereqHighlight,
+            },
+          };
+        }
+        if (node.type === "container") {
+          const isSelected = selectedContainerIds.includes(node.id);
+          if (node.selected === isSelected) {
+            return node;
+          }
+          changed = true;
+          return {
+            ...node,
+            selected: isSelected,
+          };
+        }
+        return node;
+      });
+      return changed ? updated : prevNodes;
+    });
+  }, [detailQuery.data, selectedContainerIds, selectedCourseIds, setNodes]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1045,20 +1117,26 @@ export function GraphEditorPage() {
 
   const handleSelectionChange = useCallback(
     (params: OnSelectionChangeParams) => {
-      const { nodes: selectedNodes, edges: selectedEdges } = params;
-      if (selectedNodes.length === 1) {
-        const node = selectedNodes[0];
-        if (node.type === "course") {
-          openInspectorForCourse(node.id);
-        } else if (node.type === "container") {
-          openInspectorForContainer(node.id);
-        }
-      } else {
-        closeInspector();
+      const courseIds = params.nodes
+        .filter((node) => node.type === "course")
+        .map((node) => node.id);
+      const containerIds = params.nodes
+        .filter((node) => node.type === "container")
+        .map((node) => node.id);
+      const edgeIds = params.edges.map((edge) => edge.id);
+
+      if (courseIds.length === 0 && containerIds.length === 0 && edgeIds.length === 0) {
+        clearSelection();
+        return;
       }
-      setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
+
+      applySelection({
+        courses: courseIds,
+        containers: containerIds,
+        edges: edgeIds,
+      });
     },
-    [closeInspector, openInspectorForContainer, openInspectorForCourse]
+    [applySelection, clearSelection]
   );
 
   const reactFlowToolbarActions = useMemo(
@@ -1126,6 +1204,50 @@ export function GraphEditorPage() {
     },
     [enqueueCoursePositionUpdate, flushContainerPersistence, pushHistory]
   );
+
+  const handleNodeClick = useCallback(
+    (_event: unknown, node: Node<EditorNodeData>) => {
+      if (node.type !== "course" && node.type !== "container") {
+        return;
+      }
+
+      const type = node.type === "course" ? "course" : "container";
+      const isSingleCourseSelection =
+        type === "course" &&
+        selectedCourseIds.length === 1 &&
+        selectedCourseIds[0] === node.id &&
+        selectedContainerIds.length === 0;
+      const isSingleContainerSelection =
+        type === "container" &&
+        selectedContainerIds.length === 1 &&
+        selectedContainerIds[0] === node.id &&
+        selectedCourseIds.length === 0;
+      const isSingleSelection = isSingleCourseSelection || isSingleContainerSelection;
+
+      if (!isSingleSelection) {
+        rememberClick(type, node.id);
+        return;
+      }
+
+      if (lastClickedTarget && lastClickedTarget.type === type && lastClickedTarget.id === node.id) {
+        toggleSelectionDetail(type, node.id);
+      } else {
+        rememberClick(type, node.id);
+      }
+    },
+    [
+      lastClickedTarget,
+      rememberClick,
+      selectedContainerIds,
+      selectedCourseIds,
+      toggleSelectionDetail,
+    ]
+  );
+
+  const handlePaneClick = useCallback(() => {
+    clearSelection();
+    setIsMenuOpen(false);
+  }, [clearSelection]);
 
   const handleConnect = useCallback(
     async (connection: Connection) => {
@@ -1466,7 +1588,7 @@ export function GraphEditorPage() {
       // }
       if (event.key === "Escape") {
         setIsMenuOpen(false);
-        setIsDetailBubbleOpen(false);
+        closeSelectionDetail();
         setIsGraphActionsOpen(false);
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
@@ -1480,23 +1602,98 @@ export function GraphEditorPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleDeleteSelection, reactFlowToolbarActions]);
+  }, [closeSelectionDetail, handleDeleteSelection, reactFlowToolbarActions]);
 
   const selectedCourse = useMemo(() => {
-    if (!selectedCourseId) return null;
+    if (selectedCourseIds.length !== 1 || selectedContainerIds.length !== 0) return null;
+    const courseId = selectedCourseIds[0];
     const courseNode = nodesRef.current.find(
-      (node) => node.id === selectedCourseId && node.type === "course"
+      (node) => node.id === courseId && node.type === "course"
     );
     return (courseNode?.data as CourseNodeData | undefined)?.course ?? null;
-  }, [selectedCourseId]);
+  }, [selectedContainerIds, selectedCourseIds]);
 
   const selectedContainer = useMemo(() => {
-    if (!selectedContainerId) return null;
+    if (selectedContainerIds.length !== 1 || selectedCourseIds.length !== 0) return null;
+    const containerId = selectedContainerIds[0];
     const containerNode = nodesRef.current.find(
-      (node) => node.id === selectedContainerId && node.type === "container"
+      (node) => node.id === containerId && node.type === "container"
     );
     return (containerNode?.data as ContainerNodeData | undefined)?.container ?? null;
-  }, [selectedContainerId]);
+  }, [selectedContainerIds, selectedCourseIds]);
+  const selectionCount = selectionTotals.courseCount + selectionTotals.containerCount;
+  const isMultiSelection = selectionCount > 1;
+  const hasSelection = selectionCount > 0;
+  const allCourses = detailQuery.data?.courses ?? [];
+  const multiSelectionData = useMemo(() => {
+    if (!isMultiSelection) return null;
+
+    const selectedCourses = selectedCourseIds
+      .map((id) => allCourses.find((course) => course.id === id))
+      .filter((course): course is CourseDetail => Boolean(course));
+
+    const containerMap = new Map<string, ContainerShape>();
+    nodes.forEach((node) => {
+      if (node.type === "container") {
+        containerMap.set(node.id, (node.data as ContainerNodeData).container);
+      }
+    });
+
+    const selectedContainerSet = new Set(selectedContainerIds);
+    const groupMap = new Map<
+      string,
+      { container: ContainerShape | undefined; isSelected: boolean; courses: CourseDetail[] }
+    >();
+
+    selectedContainerIds.forEach((id) => {
+      groupMap.set(id, {
+        container: containerMap.get(id),
+        isSelected: true,
+        courses: [],
+      });
+    });
+
+    const ungrouped: CourseDetail[] = [];
+
+    selectedCourses.forEach((course) => {
+      const assignedContainerId = courseAssignments[course.id];
+      if (assignedContainerId) {
+        const entry = groupMap.get(assignedContainerId) ?? {
+          container: containerMap.get(assignedContainerId),
+          isSelected: selectedContainerSet.has(assignedContainerId),
+          courses: [],
+        };
+        entry.courses.push(course);
+        groupMap.set(assignedContainerId, entry);
+      } else {
+        ungrouped.push(course);
+      }
+    });
+
+    const groups = Array.from(groupMap.entries()).map(([id, entry]) => ({
+      id,
+      title: entry.container?.title ?? "Untitled container",
+      isSelected: entry.isSelected,
+      courses: entry.courses
+        .slice()
+        .sort((a, b) => a.code.localeCompare(b.code, undefined, { sensitivity: "base" })),
+    }));
+
+    groups.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+
+    const sortedUngrouped = ungrouped.sort((a, b) =>
+      a.code.localeCompare(b.code, undefined, { sensitivity: "base" })
+    );
+
+    return { groups, ungroupedCourses: sortedUngrouped };
+  }, [
+    allCourses,
+    courseAssignments,
+    isMultiSelection,
+    nodes,
+    selectedContainerIds,
+    selectedCourseIds,
+  ]);
 
   const containerOptions = useMemo(() => {
     return nodes
@@ -1561,25 +1758,37 @@ export function GraphEditorPage() {
       </div>
     );
 
-  const inspectorContent = selectedCourse ? (
-    <CourseSidePanel
-      course={selectedCourse}
-      assignedContainerId={courseAssignments[selectedCourse.id]}
-      onChange={handleAssignContainer}
-      containerOptions={containerOptions}
-      onClose={closeInspector}
-    />
-  ) : selectedContainer ? (
-    <ContainerSidePanel
-      container={selectedContainer}
-      members={containerMembers.get(selectedContainer.id) ?? []}
-      theme={theme}
-      onChange={handleUpdateContainer}
-      onClose={closeInspector}
-    />
-  ) : (
-    placeholderPanel
-  );
+  const inspectorContent = isMultiSelection
+    ? multiSelectionData
+      ? (
+          <MultiSelectionInspector
+            groups={multiSelectionData.groups}
+            ungroupedCourses={multiSelectionData.ungroupedCourses}
+            totals={selectionTotals}
+          />
+        )
+      : placeholderPanel
+    : selectedCourse
+      ? (
+          <CourseSidePanel
+            course={selectedCourse}
+            assignedContainerId={courseAssignments[selectedCourse.id]}
+            onChange={handleAssignContainer}
+            containerOptions={containerOptions}
+            onClose={closeInspector}
+          />
+        )
+      : selectedContainer
+        ? (
+            <ContainerSidePanel
+              container={selectedContainer}
+              members={containerMembers.get(selectedContainer.id) ?? []}
+              theme={theme}
+              onChange={handleUpdateContainer}
+              onClose={closeInspector}
+            />
+          )
+        : placeholderPanel;
 
   const workspaceClasses = "relative flex flex-1 min-h-[calc(100vh-8rem)] flex-col";
 
@@ -1594,7 +1803,6 @@ export function GraphEditorPage() {
 
   const canvasMinZoom = isLargeViewport ? 0.55 : 0.35;
   const canvasFitViewPadding = isLargeViewport ? 0.2 : 0.4;
-  const hasSelection = Boolean(selectedCourse || selectedContainer);
   const canOpenInspector = hasSelection;
   const graphTitle = detailQuery.data?.graph.title ?? "Untitled graph";
   const selectedContainerMemberCount = selectedContainer
@@ -1630,31 +1838,31 @@ export function GraphEditorPage() {
     theme === "dark"
       ? "rounded-full bg-slate-900/70 px-4 py-2 text-left text-slate-200 transition hover:bg-slate-900 focus:outline-none"
       : "rounded-full bg-white px-4 py-2 text-left text-slate-700 transition hover:bg-slate-100 focus:outline-none";
-  const infoBubbleContent = hasSelection ? (
-    selectedCourse ? (
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-          Course selected
-        </p>
-        <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
-        <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
-        <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-          <span>{selectedCourse.credits} credits</span>
-          <span>Status: {selectedCourse.status}</span>
-        </div>
-      </div>
-    ) : (
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-          Container selected
-        </p>
-        <h2 className="mt-3 text-xl font-semibold">{selectedContainer?.title}</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
-        </p>
-      </div>
-    )
-  ) : (
+  const handleOpenDetailsSurface = useCallback(() => {
+    if (selectionCount === 0) return;
+    if (isMultiSelection) {
+      openAggregateDetail();
+      return;
+    }
+    if (selectedCourse) {
+      openSelectionDetail("course", selectedCourse.id);
+      return;
+    }
+    if (selectedContainer) {
+      openSelectionDetail("container", selectedContainer.id);
+    }
+  }, [
+    isMultiSelection,
+    openAggregateDetail,
+    openSelectionDetail,
+    selectedContainer,
+    selectedCourse,
+    selectionCount,
+  ]);
+  const shouldShowInspectorDrawer = !isLargeViewport && isDetailOpen && hasSelection;
+  const containerLabel = selectionTotals.containerCount === 1 ? "container" : "containers";
+  const courseLabel = selectionTotals.courseCount === 1 ? "node" : "nodes";
+  const defaultInfoBubble = (
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
         Course graph
@@ -1672,17 +1880,74 @@ export function GraphEditorPage() {
       </span>
     </div>
   );
+  const infoBubbleContent = hasSelection
+    ? isMultiSelection
+      ? (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+              Multiple selected
+            </p>
+            <h2 className="mt-3 text-xl font-semibold">
+              {selectionTotals.containerCount} {containerLabel} – {selectionTotals.courseCount} {courseLabel}
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Open the details surface to review this selection.
+            </p>
+          </div>
+        )
+      : selectedCourse
+        ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+                Course selected
+              </p>
+              <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
+              <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
+              <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+                <span>{selectedCourse.credits} credits</span>
+                <span>Status: {selectedCourse.status}</span>
+              </div>
+            </div>
+          )
+        : selectedContainer
+          ? (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+                  Container selected
+                </p>
+                <h2 className="mt-3 text-xl font-semibold">{selectedContainer.title}</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
+                </p>
+              </div>
+            )
+          : defaultInfoBubble
+    : defaultInfoBubble;
 
   const menuItems: Array<{ label: string; action: () => void; danger?: boolean }> = [];
-  if (selectedCourse) {
+  if (isMultiSelection) {
     menuItems.push({
       label: "Open details",
       action: () => {
-        if (isLargeViewport) {
-          setIsDetailBubbleOpen(true);
-        } else {
-          setIsInspectorOpen(true);
-        }
+        openAggregateDetail();
+        setIsMenuOpen(false);
+      },
+    });
+    menuItems.push({
+      label: "Delete selection",
+      action: () => {
+        void handleDeleteSelection().finally(() => {
+          setIsMenuOpen(false);
+          closeSelectionDetail();
+        });
+      },
+      danger: true,
+    });
+  } else if (selectedCourse) {
+    menuItems.push({
+      label: "Open details",
+      action: () => {
+        openSelectionDetail("course", selectedCourse.id);
         setIsMenuOpen(false);
       },
     });
@@ -1691,7 +1956,7 @@ export function GraphEditorPage() {
       action: () => {
         void handleDeleteSelection().finally(() => {
           setIsMenuOpen(false);
-          setIsDetailBubbleOpen(false);
+          closeSelectionDetail();
         });
       },
       danger: true,
@@ -1700,11 +1965,7 @@ export function GraphEditorPage() {
     menuItems.push({
       label: "Open details",
       action: () => {
-        if (isLargeViewport) {
-          setIsDetailBubbleOpen(true);
-        } else {
-          setIsInspectorOpen(true);
-        }
+        openSelectionDetail("container", selectedContainer.id);
         setIsMenuOpen(false);
       },
     });
@@ -1713,7 +1974,7 @@ export function GraphEditorPage() {
       action: () => {
         void handleDeleteSelection().finally(() => {
           setIsMenuOpen(false);
-          setIsDetailBubbleOpen(false);
+          closeSelectionDetail();
         });
       },
       danger: true,
@@ -1840,20 +2101,15 @@ export function GraphEditorPage() {
   const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: Node<EditorNodeData>) => {
       if (node.type === "course") {
-        openInspectorForCourse(node.id);
+        openSelectionDetail("course", node.id);
       } else if (node.type === "container") {
-        openInspectorForContainer(node.id);
+        openSelectionDetail("container", node.id);
       } else {
         return;
       }
       setIsMenuOpen(false);
-      if (isLargeViewport) {
-        setIsDetailBubbleOpen(true);
-      } else {
-        setIsInspectorOpen(true);
-      }
     },
-    [isLargeViewport, openInspectorForContainer, openInspectorForCourse]
+    [openSelectionDetail]
   );
 
   const pageContainerClasses =
@@ -1898,6 +2154,8 @@ export function GraphEditorPage() {
                 onNodesChange={handleNodesChange}
                 onEdgesChange={handleEdgesChange}
                 onSelectionChange={handleSelectionChange}
+                onNodeClick={handleNodeClick}
+                onPaneClick={handlePaneClick}
                 onNodeDragStop={handleNodeDragStop}
                 onNodeDoubleClick={handleNodeDoubleClick}
                 onConnect={handleConnect}
@@ -1974,28 +2232,21 @@ export function GraphEditorPage() {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (canOpenInspector) {
-                  setIsDetailBubbleOpen(true);
-                  if (!isLargeViewport) {
-                    setIsInspectorOpen(true);
-                  }
-                }
-              }}
+              onClick={handleOpenDetailsSurface}
               disabled={!canOpenInspector}
               className="pointer-events-auto absolute bottom-6 right-6 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
             >
               {canOpenInspector ? "Open details" : "Select an item"}
             </button>
 
-            {isLargeViewport && isDetailBubbleOpen ? (
+            {isLargeViewport && isDetailOpen && hasSelection ? (
               <div className="pointer-events-auto absolute right-6 top-32 z-20 w-[24rem] max-w-full">
                 <div className={inspectorBubbleClasses}>
                   <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
                     <span>Details</span>
                     <button
                       type="button"
-                      onClick={() => setIsDetailBubbleOpen(false)}
+                      onClick={() => closeSelectionDetail()}
                       className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
                     >
                       Close
@@ -2014,7 +2265,7 @@ export function GraphEditorPage() {
         </div>
       </div>
 
-      {isInspectorOpen && !isLargeViewport ? (
+      {shouldShowInspectorDrawer ? (
         <div className="fixed inset-0 z-40 flex lg:hidden">
           <button
             type="button"
@@ -2031,12 +2282,22 @@ export function GraphEditorPage() {
   );
 }
 
+export function GraphEditorPage() {
+  return (
+    <GraphSelectionProvider>
+      <GraphEditorPageInner />
+    </GraphSelectionProvider>
+  );
+}
+
 type GraphEditorCanvasProps = {
   nodes: Node<EditorNodeData>[];
   edges: Edge[];
   onNodesChange: ReturnType<typeof useNodesState>[2];
   onEdgesChange: ReturnType<typeof useEdgesState>[2];
   onSelectionChange: (params: OnSelectionChangeParams) => void;
+  onNodeClick: (event: unknown, node: Node<EditorNodeData>) => void;
+  onPaneClick: () => void;
   onNodeDragStop: (event: unknown, node: Node<EditorNodeData>) => void;
   onNodeDoubleClick: (event: unknown, node: Node<EditorNodeData>) => void;
   onConnect: (connection: Connection) => void;
@@ -2052,6 +2313,8 @@ function GraphEditorCanvas({
   onNodesChange,
   onEdgesChange,
   onSelectionChange,
+  onNodeClick,
+  onPaneClick,
   onNodeDragStop,
   onNodeDoubleClick,
   onConnect,
@@ -2074,6 +2337,8 @@ function GraphEditorCanvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         onNodeDragStop={onNodeDragStop}
         onNodeDoubleClick={onNodeDoubleClick}
         onConnect={onConnect}
@@ -2704,6 +2969,97 @@ function EligibilityList({ course }: EligibilityListProps) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+type MultiSelectionInspectorProps = {
+  groups: Array<{ id: string; title: string; isSelected: boolean; courses: CourseDetail[] }>;
+  ungroupedCourses: CourseDetail[];
+  totals: {
+    containerCount: number;
+    courseCount: number;
+  };
+};
+
+export function MultiSelectionInspector({ groups, ungroupedCourses, totals }: MultiSelectionInspectorProps) {
+  const containerLabel = totals.containerCount === 1 ? "container" : "containers";
+  const courseLabel = totals.courseCount === 1 ? "course" : "courses";
+  const hasGroups = groups.length > 0;
+  const hasUngrouped = ungroupedCourses.length > 0;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <header>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500 dark:text-slate-400">
+          Selection summary
+        </p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {totals.containerCount} {containerLabel} · {totals.courseCount} {courseLabel}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Containers display their selected courses beneath them for quick review.
+        </p>
+      </header>
+
+      {hasGroups || hasUngrouped ? (
+        <div className="space-y-4">
+          {groups.map((group) => (
+            <section
+              key={group.id}
+              className="rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{group.title}</span>
+                {group.isSelected ? (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    Selected
+                  </span>
+                ) : null}
+              </div>
+              {group.courses.length ? (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {group.courses.map((course) => (
+                    <li key={course.id} className="flex items-baseline gap-2">
+                      <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
+                        {course.code}
+                      </span>
+                      <span className="truncate text-slate-500 dark:text-slate-400">{course.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs italic text-slate-400 dark:text-slate-500">
+                  No selected courses in this container.
+                </p>
+              )}
+            </section>
+          ))}
+
+          {hasUngrouped ? (
+            <section className="rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200">
+              <div className="font-semibold text-slate-800 dark:text-slate-100">Ungrouped Courses</div>
+              <ul className="mt-2 space-y-1">
+                {ungroupedCourses.map((course) => (
+                  <li key={course.id} className="flex items-baseline gap-2">
+                    <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      {course.code}
+                    </span>
+                    <span className="truncate text-slate-500 dark:text-slate-400">{course.title}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed border-slate-300 bg-white/80 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+          The current selection does not include any courses. Choose courses or containers to see
+          them listed here.
+        </p>
+      )}
     </div>
   );
 }
