@@ -33,12 +33,14 @@ describe("MultiSelectionInspector", () => {
             id: "a",
             title: "Alpha Container",
             isSelected: true,
-            courses: [],
+            totalCourses: 1,
+            courses: [makeCourse({ id: "course-1", code: "CS101", title: "Intro to CS" })],
           },
           {
             id: "b",
             title: "Beta Container",
             isSelected: false,
+            totalCourses: 1,
             courses: [makeCourse({ id: "course-2", code: "CS102", title: "Data Structures" })],
           },
         ]}
@@ -54,10 +56,13 @@ describe("MultiSelectionInspector", () => {
     const sections = Array.from(container.querySelectorAll("section"));
     expect(sections).toHaveLength(3);
     expect(sections[0]).toHaveTextContent("Alpha Container");
-    expect(sections[0]).toHaveTextContent("Selected");
+    expect(sections[0]).toHaveTextContent("Selected container");
+    expect(sections[0]).toHaveTextContent("1 course");
+    expect(sections[0]).toHaveTextContent("CS101");
     expect(sections[1]).toHaveTextContent("Beta Container");
+    expect(sections[1]).toHaveTextContent("Container not selected");
     expect(sections[1]).toHaveTextContent("CS102");
-    expect(sections[2]).toHaveTextContent("Ungrouped Courses");
+    expect(sections[2]).toHaveTextContent("Ungrouped courses");
     expect(sections[2]).toHaveTextContent("CS103");
   });
 });

@@ -15,66 +15,43 @@ The current `GraphEditorPage` interlaces React Flow selection events, inspector 
 ## Work Breakdown
 
 ### 1. Document Interaction Rules
-- Add a short spec summarising click, double-click (second click), keyboard interactions, and selection clearing.
-- Use this as acceptance criteria for new tests.
+- ❗️ TODO: Add a short spec summarising click, double-click (second click), keyboard interactions, and selection clearing.
+- This doc will provide acceptance criteria for ongoing test work.
 
-### 2. Implement Selection Store (`useGraphSelection`)
-- Create a context/hook that exposes: (✅ initial version scaffolded in `frontend/src/sections/graph-editor/useGraphSelection.ts`)
-  - `selectedCourses`, `selectedContainers`, `selectedEdges`.
-  - Derived counts (`totalNodes`, `totalContainers`).
-  - `isDetailOpen`, `toggleDetail(type, id)`, `openDetail(type, id)`, `closeDetail()`.
-  - `select(nodes, edges)` to sync with React Flow events, and `clear()` for canvas deselect.
-- Handle “last clicked” logic to detect second-click toggling.
-- Provide a provider wrapper (`GraphSelectionProvider`) that wraps `GraphEditorPage`.
+### 2. Implement Selection Store (`useGraphSelection`) ✅
+- `frontend/src/sections/graph-editor/useGraphSelection.ts` now exports the provider + hook with:
+  - `selectedCourses`, `selectedContainers`, `selectedEdges`, derived totals, and detail toggles.
+  - “Last clicked” tracking to drive second-click behaviour.
+- Provider wraps `GraphEditorPage`; dedicated tests live in `frontend/src/sections/graph-editor/__tests__/useGraphSelection.test.tsx`.
 
-### 3. Refactor `GraphEditorPage`
-- Remove local selection-related state (`selectedCourseId`, `selectedContainerId`, `isDetailBubbleOpen`, etc.) and replace with selection store.
-- Update React Flow handlers:
-  - `onSelectionChange` calls `selection.select(selectedNodes, selectedEdges)`.
-  - `onNodeClick` calls `selection.toggleDetail(type, id)` (first click selects via `select`, second click toggles detail open).
-  - `onPaneClick` (React Flow) triggers `selection.clear()`.
-- Keep history/undo logic focused on structural mutations (moves, updates) without touching selection.
+### 3. Refactor `GraphEditorPage` ✅
+- Replaced legacy selection state with the store; React Flow handlers now call `select`, `clear`, `toggleDetail`.
+- Detail bubble/drawer toggling came out of the store (single vs. second click) and respects viewport breakpoints.
+- History stack excludes selection; added `UndoRedoHistory.test.tsx` to guard that behaviour.
 
-### 4. Optimistic Updates & Data Fetch
-- Preserve existing optimistic container/course update queues, but move helper logic (sample import normalisers, queue utilities) into `frontend/src/sections/graph-editor/` for readability.
-- Ensure cache updates (React Query) are selection-agnostic.
+### 4. Optimistic Updates & Data Fetch ✅
+- Extracted helpers into `frontend/src/sections/graph-editor/sampleGraphImport.ts` and `graphPersistence.ts`.
+- Import/export flows and assignment persistence now share reusable utilities; GraphEditorPage consumes them.
 
-### 5. UI Updates
-- **Info bubble:**
-  - Show node details for single selection.
-  - For multi-select show counts (`${containerCount} containers – ${nodeCount} nodes`).
-- **Detail bubble/drawer:**
-  - Single selection shows existing inspector.
-  - Multi-select shows a tree (containers as folders; nodes as files). Outline:
-    ```
-    Container A
-      • Course 101
-      • Course 102
-    Container B
-      • Course 201
-      • Course 202
-    Ungrouped Courses
-      • Course 301
-    ```
-- Preserve floating bubble on desktop; keep drawer for narrow viewports.
+### 5. UI Updates ✅
+- **Info bubble:** single selection shows course/container metadata; multi-select shows aggregate counts.
+- **Detail surface:** multi-select view renders a container → courses tree with counts, badges, and ungrouped section (`MultiSelectionInspector`).
+- Desktop still uses the floating bubble; tablet/mobile rely on the drawer.
 
-### 6. Tests
-- Add Vitest + React Testing Library tests covering:
-  1. Single click selects and updates info bubble.
-  2. Second click on same node opens detail bubble.
-  3. Multi-select updates counts and renders tree.
-  4. Clicking empty canvas clears selection and closes detail bubble.
-  5. Undo/redo does not affect selection state.
-- Update existing unit tests to use selection store where necessary.
+### 6. Tests ✅ (initial wave)
+1. `useGraphSelection` hook reducer/unit tests (selection + detail toggles).
+2. Multi-select inspector rendering test covering ordering, badges, and counts.
+3. Undo/redo stack unit test ensuring selection isn’t persisted in history.
+- Remaining interaction coverage (info bubble assertions, canvas clear) tracked for follow-up when UI automation is added.
 
-### 7. Implementation Steps
-1. Scaffold `useGraphSelection` (context, provider, hook) + tests. ✅ Hook scaffolded; tests pending.
-2. Wrap `GraphEditorPage` with provider; refactor selection/inspector state.
-3. Implement new info bubble/detail rendering.
-4. Extract helper modules (sample import, queued mutation utilities).
-5. Update handlers (`onSelectionChange`, `onNodeClick`, `onPaneClick`) to use the store.
-6. Adjust QA/regression tests (Vitest).
-7. Manual QA: single/multi selection, detail toggling, empty canvas, undo/redo, sample reset.
+### 7. Implementation Steps (status)
+1. Scaffold `useGraphSelection` + tests. ✅
+2. Wrap `GraphEditorPage` with provider; refactor state. ✅
+3. Implement info/detail surfaces with multi-select tree. ✅
+4. Extract helper modules (sample import + optimistic persistence). ✅
+5. Update handlers for the new store. ✅
+6. Adjust QA/regression tests (Vitest). ✅ initial unit coverage; integration tests pending.
+7. Manual QA checklist to repeat before release: single/multi selection, detail toggle, clear on canvas, undo/redo, sample reset. 🚧 Ongoing.
 
 ## Risks & Mitigations
 - **Regression in edge cases:** mitigate with new tests + manual QA on multi-select and sample import flows.

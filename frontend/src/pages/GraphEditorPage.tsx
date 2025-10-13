@@ -47,6 +47,20 @@ import { useUpdateCourseMutation } from "../sections/graph-editor/useUpdateCours
 import { useUpdatePrerequisitesMutation } from "../sections/graph-editor/useUpdatePrerequisitesMutation";
 import { useDeleteCourseMutation } from "../sections/graph-editor/useDeleteCourseMutation";
 import { useUpdateGraphMutation } from "../sections/graph-editor/useUpdateGraphMutation";
+import {
+  cloneGraphDetail,
+  createAssignmentsPersistence,
+} from "../sections/graph-editor/graphPersistence";
+import {
+  buildAssignments,
+  buildMultiSelectionSummary,
+  normaliseContainers,
+  normaliseCourses,
+  prepareSampleGraphImport,
+  type ImportCoursePayload,
+  type NormalisedContainer,
+  type SampleGraph,
+} from "../sections/graph-editor/sampleGraphImport";
 import { Skeleton } from "../components/Skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -152,66 +166,8 @@ function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
-type SampleGraphCourse = {
-  id?: string;
-  code: string;
-  title: string;
-  credits?: number;
-  term?: string | null;
-  status?: CourseStatus;
-  grade?: number | string | null;
-  is_pass_fail?: boolean;
-  position?: { x?: number; y?: number };
-  notes?: string | null;
-  prerequisites?: Array<{ course_id: string; condition?: string | null }>;
-};
-
-type SampleGraph = {
-  graph: {
-    title: string;
-    description?: string | null;
-    containers: Array<{
-      id: string;
-      title: string;
-      palette_id?: string | null;
-      color?: string;
-      width?: number;
-      height?: number;
-      position?: { x?: number; y?: number };
-    }>;
-    container_assignments: Record<string, string>;
-  };
-  courses: SampleGraphCourse[];
-};
-
 const smallSample = smallSampleRaw as SampleGraph;
 const largeSample = largeSampleRaw as SampleGraph;
-
-type ImportPrerequisitePayload = { course_id: string; condition: string | null };
-type ImportCoursePayload = {
-  id: string;
-  code: string;
-  title: string;
-  credits: number;
-  term: string | null;
-  status: CourseStatus;
-  grade: number | null;
-  is_pass_fail: boolean;
-  position: { x: number; y: number };
-  notes: string | null;
-  prerequisites: ImportPrerequisitePayload[];
-};
-
-function cloneGraphDetail(detail: GraphDetail): GraphDetail {
-  return {
-    graph: {
-      ...detail.graph,
-      containers: detail.graph.containers.map((container) => ({ ...container })),
-      container_assignments: { ...detail.graph.container_assignments },
-    },
-    courses: detail.courses.map((course) => ({ ...course })),
-  };
-}
 
 function resolveContainerVisuals(
   container: ContainerShape,
@@ -723,124 +679,31 @@ function GraphEditorPageInner() {
     [enqueueGraphMutation, updateCourseMutation, updateGraphCache]
   );
 
-  const persistAssignments = useCallback(
-    async (assignments: Record<string, string>) => {
-      if (!graphId) return;
-      const sanitized: Record<string, string> = {};
+  const persistAssignments = useMemo(
+    () =>
+      createAssignmentsPersistence({
+        graphId,
+        enqueueMutation: enqueueGraphMutation,
+        updateGraphCache,
+        updateGraphMutation,
+      }),
+    [enqueueGraphMutation, graphId, updateGraphCache, updateGraphMutation]
+  );
+
+  const persistAssignmentsSafe = useCallback(
+    (assignments: Record<string, string>) => {
       const validCourseIds = new Set(
         nodesRef.current.filter((node) => node.type === "course").map((node) => node.id)
       );
-      for (const [courseId, containerId] of Object.entries(assignments)) {
-        if (
-          typeof containerId === "string" &&
-          containerId &&
-          validCourseIds.has(courseId)
-        ) {
-          sanitized[courseId] = containerId;
-        }
-      }
-      const rollback = updateGraphCache((draft) => {
-        draft.graph.container_assignments = { ...sanitized };
-      });
-      await enqueueGraphMutation(async () => {
-        try {
-          await updateGraphMutation.mutateAsync({ container_assignments: sanitized });
-        } catch (error) {
-          console.error("Failed to persist assignments", error);
-          rollback();
-          throw error;
-        }
-      });
+      return persistAssignments(assignments, validCourseIds);
     },
-    [enqueueGraphMutation, graphId, updateGraphMutation, updateGraphCache]
+    [persistAssignments]
   );
-
-  const normaliseContainers = useCallback(
-    (containers: SampleGraph["graph"]["containers"] | undefined) =>
-      (containers ?? []).map((container) => ({
-        id: container.id,
-        title: container.title || "Group",
-        color: container.color || storedContainerColor(container.palette_id ?? null),
-        width: container.width ?? 320,
-        height: container.height ?? 200,
-        position: {
-          x: container.position?.x ?? 0,
-          y: container.position?.y ?? 0,
-        },
-      })),
-    []
-  );
-
-  const normaliseCourses = useCallback((courses: SampleGraphCourse[] | undefined) => {
-    const allowedStatuses: CourseStatus[] = ["planned", "completed", "failed"];
-    const idMap = new Map<string, string>();
-
-    type PendingCourse = {
-      originalId: string;
-      course: ImportCoursePayload & {
-        prerequisites: Array<{ course_id: string; condition?: string | null }>;
-      };
-    };
-
-    const pending: PendingCourse[] = (courses ?? []).map((course) => {
-      const originalId = course.id ?? course.code ?? generateUuid();
-      const uuid = generateUuid();
-      idMap.set(originalId, uuid);
-
-      const rawStatus = typeof course.status === "string" ? course.status.toLowerCase() : "planned";
-      const status = allowedStatuses.includes(rawStatus as CourseStatus)
-        ? (rawStatus as CourseStatus)
-        : "planned";
-      const gradeValue = course.grade;
-      const numericGrade =
-        gradeValue === null || gradeValue === undefined || gradeValue === ""
-          ? null
-          : Number(gradeValue);
-
-      return {
-        originalId,
-        course: {
-          id: uuid,
-          code: course.code,
-          title: course.title,
-          credits: Math.max(0, Math.round(Number(course.credits ?? 0))),
-          term: course.term ?? null,
-          status,
-          grade: Number.isFinite(numericGrade) ? Number(numericGrade) : null,
-          is_pass_fail: Boolean(course.is_pass_fail),
-          position: {
-            x: Number(course.position?.x ?? 0),
-            y: Number(course.position?.y ?? 0),
-          },
-          notes: course.notes ?? null,
-          prerequisites: Array.isArray(course.prerequisites) ? course.prerequisites : [],
-        },
-      };
-    });
-
-    pending.forEach((entry) => {
-      entry.course.prerequisites = entry.course.prerequisites
-        .map((item) => {
-          const sourceId = typeof item?.course_id === "string" ? idMap.get(item.course_id) : undefined;
-          if (!sourceId) return null;
-          return {
-            course_id: sourceId,
-            condition: item?.condition ?? null,
-          };
-        })
-        .filter(Boolean) as Array<{ course_id: string; condition: string | null }>;
-    });
-
-    return {
-      courses: pending.map((entry) => entry.course as ImportCoursePayload),
-      idMap,
-    };
-  }, []);
 
   const submitImportPayload = useCallback(
     async (payload: {
       replace_existing: boolean;
-      containers: ReturnType<typeof normaliseContainers>;
+      containers: NormalisedContainer[];
       container_assignments: Record<string, string>;
       courses: ImportCoursePayload[];
     }) => {
@@ -858,44 +721,38 @@ function GraphEditorPageInner() {
   const applySampleGraph = useCallback(
     async (sample: SampleGraph) => {
       if (!graphId) return;
-    try {
-      setIsImporting(true);
-      const { courses, idMap } = normaliseCourses(sample.courses);
-      const containers = normaliseContainers(sample.graph?.containers);
-      const rawAssignments = sample.graph?.container_assignments ?? {};
-      const assignments: Record<string, string> = {};
-      Object.entries(rawAssignments).forEach(([courseId, containerId]) => {
-        const mappedId = idMap.get(courseId);
-        if (mappedId) {
-          assignments[mappedId] = containerId;
-        }
-      });
+      try {
+        setIsImporting(true);
+        const { containers, courses, assignments } = prepareSampleGraphImport(sample, {
+          generateId: generateUuid,
+          resolveContainerColor: (paletteId, fallback) => storedContainerColor(paletteId, fallback),
+        });
 
-      const payload = {
-        replace_existing: true,
-        containers,
-        container_assignments: assignments,
-        courses,
-      };
-      await submitImportPayload(payload);
-    } catch (error) {
-      if (error && typeof error === "object" && "response" in error) {
-        const response = (error as { response: Response }).response;
-        try {
-          const detail = await response.json();
-          console.error("Failed to apply sample graph", detail);
-        } catch {
+        const payload = {
+          replace_existing: true,
+          containers,
+          container_assignments: assignments,
+          courses,
+        };
+        await submitImportPayload(payload);
+      } catch (error) {
+        if (error && typeof error === "object" && "response" in error) {
+          const response = (error as { response: Response }).response;
+          try {
+            const detail = await response.json();
+            console.error("Failed to apply sample graph", detail);
+          } catch {
+            console.error("Failed to apply sample graph", error);
+          }
+        } else {
           console.error("Failed to apply sample graph", error);
         }
-      } else {
-        console.error("Failed to apply sample graph", error);
+        alert("Unable to load sample graph. Please try again.");
+      } finally {
+        setIsImporting(false);
       }
-      alert("Unable to load sample graph. Please try again.");
-    } finally {
-      setIsImporting(false);
-    }
     },
-    [graphId, normaliseContainers, normaliseCourses, submitImportPayload]
+    [graphId, submitImportPayload]
   );
 
   useEffect(() => {
@@ -1157,7 +1014,7 @@ function GraphEditorPageInner() {
         setNodes(previous.nodes);
         setEdges(previous.edges);
         setTimeout(() => {
-          void persistAssignments(previous.assignments);
+          void persistAssignmentsSafe(previous.assignments);
           scheduleContainerPersistence();
         }, 0);
       },
@@ -1177,12 +1034,12 @@ function GraphEditorPageInner() {
         setNodes(next.nodes);
         setEdges(next.edges);
         setTimeout(() => {
-          void persistAssignments(next.assignments);
+          void persistAssignmentsSafe(next.assignments);
           scheduleContainerPersistence();
         }, 0);
       },
     }),
-    [persistAssignments, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
+    [persistAssignmentsSafe, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
   );
 
   const handleNodeDragStop = useCallback(
@@ -1311,7 +1168,7 @@ function GraphEditorPageInner() {
         } else {
           next[courseId] = containerId;
         }
-        void persistAssignments(next);
+        void persistAssignmentsSafe(next);
         return next;
       });
       setNodes((nds) =>
@@ -1327,7 +1184,7 @@ function GraphEditorPageInner() {
       );
       setTimeout(() => pushHistory(), 0);
     },
-    [persistAssignments, pushHistory, setNodes]
+    [persistAssignmentsSafe, pushHistory, setNodes]
   );
 
   const handleAddContainer = useCallback(() => {
@@ -1427,7 +1284,7 @@ function GraphEditorPageInner() {
               delete next[courseId];
             }
           });
-          void persistAssignments(next);
+          void persistAssignmentsSafe(next);
           return next;
         });
         setNodes((nds) => nds.filter((candidate) => candidate.id !== containerId));
@@ -1507,11 +1364,18 @@ function GraphEditorPageInner() {
         const text = await file.text();
         const parsed = JSON.parse(text) as Partial<SampleGraph>;
         const replaceExisting = window.confirm("Replace existing courses with the imported data?");
+        const { courses, idMap } = normaliseCourses(parsed.courses, generateUuid);
+        const containers = normaliseContainers(parsed.graph?.containers, (paletteId, fallback) =>
+          storedContainerColor(paletteId, fallback)
+        );
+        const rawAssignments = parsed.graph?.container_assignments ?? {};
+        const assignments = buildAssignments(rawAssignments, idMap);
+
         const payload = {
           replace_existing: replaceExisting,
-          containers: normaliseContainers(parsed.graph?.containers),
-          container_assignments: parsed.graph?.container_assignments ?? {},
-          courses: normaliseCourses(parsed.courses),
+          containers,
+          container_assignments: assignments,
+          courses,
         };
 
         await submitImportPayload(payload);
@@ -1524,7 +1388,7 @@ function GraphEditorPageInner() {
         setIsImporting(false);
       }
     },
-    [graphId, normaliseContainers, normaliseCourses, submitImportPayload]
+    [graphId, submitImportPayload]
   );
 
   const handleResetSmallSample = useCallback(() => {
@@ -1627,73 +1491,20 @@ function GraphEditorPageInner() {
   const allCourses = detailQuery.data?.courses ?? [];
   const multiSelectionData = useMemo(() => {
     if (!isMultiSelection) return null;
-
-    const selectedCourses = selectedCourseIds
-      .map((id) => allCourses.find((course) => course.id === id))
-      .filter((course): course is CourseDetail => Boolean(course));
-
     const containerMap = new Map<string, ContainerShape>();
     nodes.forEach((node) => {
       if (node.type === "container") {
         containerMap.set(node.id, (node.data as ContainerNodeData).container);
       }
     });
-
-    const selectedContainerSet = new Set(selectedContainerIds);
-    const groupMap = new Map<
-      string,
-      { container: ContainerShape | undefined; isSelected: boolean; courses: CourseDetail[] }
-    >();
-
-    selectedContainerIds.forEach((id) => {
-      groupMap.set(id, {
-        container: containerMap.get(id),
-        isSelected: true,
-        courses: [],
-      });
+    return buildMultiSelectionSummary({
+      courses: allCourses,
+      selectedCourseIds,
+      selectedContainerIds,
+      courseAssignments,
+      containers: containerMap,
     });
-
-    const ungrouped: CourseDetail[] = [];
-
-    selectedCourses.forEach((course) => {
-      const assignedContainerId = courseAssignments[course.id];
-      if (assignedContainerId) {
-        const entry = groupMap.get(assignedContainerId) ?? {
-          container: containerMap.get(assignedContainerId),
-          isSelected: selectedContainerSet.has(assignedContainerId),
-          courses: [],
-        };
-        entry.courses.push(course);
-        groupMap.set(assignedContainerId, entry);
-      } else {
-        ungrouped.push(course);
-      }
-    });
-
-    const groups = Array.from(groupMap.entries()).map(([id, entry]) => ({
-      id,
-      title: entry.container?.title ?? "Untitled container",
-      isSelected: entry.isSelected,
-      courses: entry.courses
-        .slice()
-        .sort((a, b) => a.code.localeCompare(b.code, undefined, { sensitivity: "base" })),
-    }));
-
-    groups.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
-
-    const sortedUngrouped = ungrouped.sort((a, b) =>
-      a.code.localeCompare(b.code, undefined, { sensitivity: "base" })
-    );
-
-    return { groups, ungroupedCourses: sortedUngrouped };
-  }, [
-    allCourses,
-    courseAssignments,
-    isMultiSelection,
-    nodes,
-    selectedContainerIds,
-    selectedCourseIds,
-  ]);
+  }, [allCourses, courseAssignments, isMultiSelection, nodes, selectedContainerIds, selectedCourseIds]);
 
   const containerOptions = useMemo(() => {
     return nodes
@@ -2974,7 +2785,7 @@ function EligibilityList({ course }: EligibilityListProps) {
 }
 
 type MultiSelectionInspectorProps = {
-  groups: Array<{ id: string; title: string; isSelected: boolean; courses: CourseDetail[] }>;
+  groups: Array<{ id: string; title: string; isSelected: boolean; totalCourses: number; courses: CourseDetail[] }>;
   ungroupedCourses: CourseDetail[];
   totals: {
     containerCount: number;
@@ -3004,42 +2815,68 @@ export function MultiSelectionInspector({ groups, ungroupedCourses, totals }: Mu
 
       {hasGroups || hasUngrouped ? (
         <div className="space-y-4">
-          {groups.map((group) => (
-            <section
-              key={group.id}
-              className="rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{group.title}</span>
-                {group.isSelected ? (
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200">
-                    Selected
+          {groups.map((group) => {
+            const courseCountLabel =
+              group.totalCourses === 1 ? "1 course" : `${group.totalCourses} courses`;
+            const badgeClasses = group.isSelected
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200"
+              : "border-slate-300 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300";
+            const badgeLabel = group.isSelected ? "Selected container" : "Container not selected";
+            return (
+              <section
+                key={group.id}
+                className="rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                      {group.title}
+                    </span>
+                    <span
+                      className={`inline-flex w-fit items-center gap-2 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${badgeClasses}`}
+                    >
+                      {badgeLabel}
+                    </span>
+                  </div>
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {courseCountLabel}
                   </span>
-                ) : null}
-              </div>
-              {group.courses.length ? (
-                <ul className="mt-2 space-y-1 text-sm">
-                  {group.courses.map((course) => (
-                    <li key={course.id} className="flex items-baseline gap-2">
-                      <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
-                      <span className="font-medium text-slate-800 dark:text-slate-100">
-                        {course.code}
-                      </span>
-                      <span className="truncate text-slate-500 dark:text-slate-400">{course.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-2 text-xs italic text-slate-400 dark:text-slate-500">
-                  No selected courses in this container.
-                </p>
-              )}
-            </section>
-          ))}
+                </div>
+                {group.courses.length ? (
+                  <ul className="mt-3 space-y-1 text-sm">
+                    {group.courses.map((course) => (
+                      <li key={course.id} className="flex items-baseline gap-2">
+                        <span className="text-xs text-slate-400 dark:text-slate-500">•</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-100">
+                          {course.code}
+                        </span>
+                        <span className="truncate text-slate-500 dark:text-slate-400">
+                          {course.title}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-xs italic text-slate-400 dark:text-slate-500">
+                    No selected courses in this container.
+                  </p>
+                )}
+              </section>
+            );
+          })}
 
           {hasUngrouped ? (
             <section className="rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200">
-              <div className="font-semibold text-slate-800 dark:text-slate-100">Ungrouped Courses</div>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-800 dark:text-slate-100">
+                  Ungrouped courses
+                </span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {ungroupedCourses.length === 1
+                    ? "1 course"
+                    : `${ungroupedCourses.length} courses`}
+                </span>
+              </div>
               <ul className="mt-2 space-y-1">
                 {ungroupedCourses.map((course) => (
                   <li key={course.id} className="flex items-baseline gap-2">
