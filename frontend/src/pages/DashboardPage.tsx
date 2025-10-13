@@ -106,11 +106,13 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 text-slate-900 transition-colors dark:text-slate-100">
       <section className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Your dashboard</h1>
-          <p className="mt-2 text-slate-600">
+          <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100">
+            Your dashboard
+          </h1>
+          <p className="mt-2 text-slate-600 dark:text-slate-300">
             Review your course plans, build a new graph, or start from a featured template.
           </p>
         </div>
@@ -126,13 +128,13 @@ export function DashboardPage() {
       </section>
 
       <section className="flex items-center gap-3">
-        <label className="flex flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
+        <label className="flex flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200 dark:shadow-none">
           <span className="sr-only">Search graphs</span>
           <input
             value={searchTerm}
             onChange={handleSearchChange}
             placeholder="Search your graphs"
-            className="w-full border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+            className="w-full border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
           />
         </label>
       </section>

@@ -13,11 +13,26 @@ export type GraphDetail = {
     is_template: boolean;
     updated_at: string;
     created_at: string;
+    containers: GraphContainer[];
+    container_assignments: Record<string, string>;
   };
   courses: CourseDetail[];
 };
 
-export type CourseStatus = "planned" | "in_progress" | "completed";
+export type GraphContainer = {
+  id: string;
+  title: string;
+  palette_id?: string | null;
+  color: string;
+  width: number;
+  height: number;
+  position: {
+    x: number;
+    y: number;
+  };
+};
+
+export type CourseStatus = "planned" | "completed" | "failed";
 
 export type CoursePrerequisite = {
   course_id: string;

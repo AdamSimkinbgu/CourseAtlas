@@ -104,12 +104,12 @@ const CONTAINER_NODE_SHADOW: Record<ThemeMode, string> = {
 
 const DEFAULT_CONTAINER_FALLBACK = {
   light: {
-    fill: "rgba(203, 213, 225, 0.18)",
+    fill: "transparent",
     border: "#cbd5e1",
     shadow: CONTAINER_NODE_SHADOW.light,
   },
   dark: {
-    fill: "rgba(148, 163, 184, 0.12)",
+    fill: "transparent",
     border: "#475569",
     shadow: CONTAINER_NODE_SHADOW.dark,
   },
@@ -298,16 +298,11 @@ type ContainerNodeProps = NodeProps<ContainerNodeData>;
 function ContainerNode({ data, selected }: ContainerNodeProps) {
   const { container, onSelect, theme, courseCount } = data;
   const visual = resolveContainerVisuals(container, theme);
-  const gradientOverlay =
-    theme === "dark"
-      ? "linear-gradient(135deg, rgba(248,250,252,0.12), rgba(15,23,42,0.05) 45%, rgba(15,23,42,0) 80%)"
-      : "linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.25) 55%, rgba(255,255,255,0) 85%)";
-
   return (
     <div
       className="group relative h-full w-full rounded-3xl border border-dashed transition"
       style={{
-        background: `${gradientOverlay}, ${visual.fill}`,
+        backgroundColor: visual.fill,
         borderColor: visual.border,
         boxShadow: selected
           ? `0 0 0 3px ${THEME_TOKENS[theme].halo.active}, ${visual.shadow}`
@@ -323,17 +318,10 @@ function ContainerNode({ data, selected }: ContainerNodeProps) {
         handleClassName="h-3 w-3 rounded-sm border border-slate-300 bg-white dark:border-slate-500 dark:bg-slate-950"
       />
       <div className="pointer-events-none flex items-center justify-between px-5 py-4 text-sm font-semibold text-slate-700 dark:text-slate-100">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-[0.3em] text-slate-500 dark:text-slate-300">
-            Container
-          </span>
-          <span className="text-lg font-semibold">{container.title}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-300">
-          <span className="rounded-full border border-current px-2 py-0.5 text-[11px] font-medium uppercase">
-            {courseCount === 1 ? "1 course" : `${courseCount} courses`}
-          </span>
-        </div>
+        <span className="text-lg font-semibold">{container.title}</span>
+        <span className="rounded-full border border-current px-2 py-0.5 text-[11px] font-medium uppercase text-slate-500 dark:text-slate-300">
+          {courseCount === 1 ? "1 course" : `${courseCount} courses`}
+        </span>
       </div>
     </div>
   );
@@ -403,7 +391,7 @@ export function GraphEditorPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLargeViewport, setIsLargeViewport] = useState(initialViewportIsLarge);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
-  const [isDetailBubbleOpen, setIsDetailBubbleOpen] = useState(false);
+  const [isDetailBubbleOpen, setIsDetailBubbleOpen] = useState(initialViewportIsLarge);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGraphActionsOpen, setIsGraphActionsOpen] = useState(false);
 
@@ -466,9 +454,7 @@ export function GraphEditorPage() {
     const applyViewport = (matches: boolean) => {
       setIsLargeViewport(matches);
       setIsInspectorOpen(false);
-      if (!matches) {
-        setIsDetailBubbleOpen(false);
-      }
+      setIsDetailBubbleOpen(matches);
     };
     applyViewport(mediaQuery.matches);
     const listener = (event: MediaQueryListEvent) => {
@@ -483,9 +469,13 @@ export function GraphEditorPage() {
   useEffect(() => {
     if (!selectedCourseId && !selectedContainerId) {
       setIsMenuOpen(false);
-      setIsDetailBubbleOpen(false);
+      if (!isLargeViewport) {
+        setIsDetailBubbleOpen(false);
+      }
+    } else if (isLargeViewport) {
+      setIsDetailBubbleOpen(true);
     }
-  }, [selectedCourseId, selectedContainerId]);
+  }, [isLargeViewport, selectedContainerId, selectedCourseId]);
 
   const pushHistory = useCallback(() => {
     const snapshot: HistoryEntry = {
@@ -1610,8 +1600,13 @@ export function GraphEditorPage() {
     [isLargeViewport, openInspectorForContainer, openInspectorForCourse]
   );
 
+  const pageContainerClasses =
+    theme === "dark"
+      ? "flex h-full min-h-[calc(100vh-4rem)] flex-col gap-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-0 py-6 text-slate-100 transition-colors sm:gap-6"
+      : "flex h-full min-h-[calc(100vh-4rem)] flex-col gap-4 bg-gradient-to-b from-slate-50 via-white to-slate-200 px-0 py-6 text-slate-900 transition-colors sm:gap-6";
+
   return (
-    <div className="flex h-full min-h-[calc(100vh-4rem)] flex-col gap-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-0 py-6 text-slate-100 sm:gap-6">
+    <div className={pageContainerClasses}>
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -1837,7 +1832,11 @@ function GraphEditorCanvas({
       >
         <MiniMap pannable zoomable />
         <Controls />
-        <Background gap={24} color={theme === "dark" ? "#1f2937" : "#d4d4d8"} />
+        <Background
+          gap={28}
+          size={1.8}
+          color={theme === "dark" ? "rgba(31,41,55,0.6)" : "rgba(148,163,184,0.35)"}
+        />
       </ReactFlow>
     </div>
   );
