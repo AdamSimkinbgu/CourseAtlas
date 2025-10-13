@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -22,7 +22,7 @@ class CourseRepository:
         self.session.refresh(course)
         return course
 
-    def bulk_create(self, courses: Iterable[Course]) -> list[Course]:
+    def bulk_create(self, courses: Iterable[Course]) -> List[Course]:
         course_list = list(courses)
         self.session.add_all(course_list)
         self.session.flush()
@@ -31,7 +31,7 @@ class CourseRepository:
     def get(self, course_id: UUID) -> Optional[Course]:
         return self.session.get(Course, course_id)
 
-    def list_by_graph(self, graph_id: UUID) -> list[Course]:
+    def list_by_graph(self, graph_id: UUID) -> List[Course]:
         statement = select(Course).where(Course.graph_id == graph_id)
         return list(self.session.exec(statement))
 

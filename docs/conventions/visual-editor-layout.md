@@ -9,23 +9,34 @@ Design guardrails for positioning and responsive behaviour inside the Course Atl
 - **Tablet (768–1023px)**: Inspector collapses into a drawer; canvas gains a 16px padding bubble and auto-fit padding increases to 0.4 for breathing room.
 - **Mobile (<768px)**: Same tablet behaviour with tighter 12px outer padding; toolbar remains floating and drawer consumes full width when opened.
 
+Canvas background uses a subtle vertical gradient (`from-slate-950 via-slate-900 to-slate-950`) overlaid with a neutral square grid so nodes always read against the page chrome.
+
 ## Floating Toolbar Placement
 
-- Primary trigger is the `Graph actions` bubble anchored bottom-left; tapping it reveals a vertical stack of action bubbles (add node/container, import/export, resets, layout, fit view, undo/redo, toggle theme).
+- Primary trigger is the `Graph actions` bubble anchored top-right of the canvas; activating it expands a vertical stack of action bubbles (add node/container, import/export, resets, layout, fit view, undo/redo, toggle theme).
 - Actions close the stack on selection to keep the workspace clear; busy items show their loading state (e.g., `Importing…`).
 - Placement keeps controls close to the graph without occupying header space, matching the full-bleed canvas treatment.
 
 ## Selection & Inspector Overlays
 
-- Top-left host two bubbles: the info bubble and the action bubble. The info bubble shows graph guidance by default and swaps to contextual details when a node/container is selected.
-- The adjacent action bubble exposes quick actions (open details, delete, deselect). When nothing is selected, it remains disabled with a greyed arrow.
-- On desktop an expandable inspector bubble lives at the right edge; it stays collapsed until expanded, then loads the full course/container form. Mobile devices use the existing bottom-sheet overlay instead.
+- Top-left hosts a stacked bubble cluster: the info bubble (graph guidance or contextual summary) and the action bubble (quick actions: open details, delete, deselect). When nothing is selected, the menu bubble remains disabled.
+- Double-clicking a node/container opens its detail surface. On desktop the detail surface is a floating bubble on the right edge; on mobile the existing bottom-sheet inspector opens.
+- Escape closes any open menus/bubbles; Delete removes selected items.
+
+## Course Node Appearance
+
+- Cards are rounded (24px radius) with a light gradient overlay and status-driven background tint from `THEME_TOKENS`.
+- Header shows course code, optional grade badge, and a status pill. Selection adds a halo shadow; prerequisites highlight via secondary halos.
+- Body lists meta chips (credits, term, grading mode, prerequisite count) in a two-column grid. Chips reuse the translucent `bg-white/60` + subtle border treatment for light/dark themes.
+- Connection ports use React Flow handles positioned mid-left/right with filled circular markers.
+- Base shadow: light theme `0 20px 45px -30px rgba(15,23,42,0.28)`; dark theme `0 24px 55px -32px rgba(2,6,23,0.85)` layered under the halo.
 
 ## Container Appearance
 
-- Containers render as rounded 16px panels with semi-transparent fills from `CONTAINER_PALETTE`. Light theme uses 18% opacity; dark theme uses 12%.
-- Selected container ring uses theme halo token; NodeResizer handles styled with subtle outlines for better hit area.
-- Container titles sit top-left with subtle typography and adapt to theme (`text-slate-800` / `text-slate-100`).
+- Containers render as rounded 24px rectangles with dashed borders using palette colours; backgrounds remain translucent so child nodes stay legible.
+- Header row includes the container title and a course-count badge, separated by a dashed border.
+- Node resizer handles and dashed guides mirror the card styling (lighter greys in light theme, muted slates in dark).
+- Additional inner padding (Node extent set to `"parent"`) creates a gutter so nodes never hug the container edge.
 
 ## Collapsed Sidebar & Drawer Behaviour
 

@@ -69,6 +69,10 @@ async def create_graph(
             title=payload.title,
             description=payload.description,
             visibility=payload.visibility,
+            containers=[
+                container.model_dump() for container in payload.containers or []
+            ],
+            container_assignments=payload.container_assignments,
         )
     )
     return _to_graph_read(graph)
@@ -188,29 +192,15 @@ async def export_graph(
 async def import_graph_data(
     graph_id: UUID,
     payload: schemas.GraphImportRequest,
-    course_service: CourseServiceDep,
     graph_service: GraphServiceDep,
     current_user: CurrentUser,
 ) -> dict:
-    graph_service.get_graph(graph_id, requesting_user=current_user.id)
-    if payload.replace_existing:
-        course_service.delete_courses_for_graph(graph_id)
-    created = course_service.add_courses_bulk(
+    created = graph_service.import_graph_data(
         graph_id,
-        [
-            CourseCreate(
-                graph_id=graph_id,
-                code=course.code,
-                title=course.title,
-                credits=course.credits,
-                term=course.term,
-                status=course.status,
-                position_x=course.position.x,
-                position_y=course.position.y,
-                is_pass_fail=course.is_pass_fail,
-                notes=course.notes,
-            )
-            for course in payload.courses
-        ],
+        requesting_user=current_user.id,
+        containers=[container.model_dump() for container in payload.containers],
+        container_assignments=payload.container_assignments,
+        courses=[course.model_dump() for course in payload.courses],
+        replace_existing=payload.replace_existing,
     )
-    return {"imported": len(created)}
+    return {"imported": created}

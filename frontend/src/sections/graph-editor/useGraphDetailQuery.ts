@@ -4,6 +4,41 @@ import { api } from "../../lib/api";
 
 export type GraphVisibility = "private" | "public";
 
+type GraphDetailResponse = {
+  graph: {
+    id: string;
+    title: string;
+    description: string | null;
+    visibility: GraphVisibility;
+    is_template: boolean;
+    updated_at: string;
+    created_at: string;
+    containers: GraphContainer[];
+    container_assignments: Record<string, string>;
+  };
+  courses: CourseDetail[];
+};
+
+type CourseRaw = {
+  id: string;
+  graph_id: string;
+  code: string;
+  title: string;
+  credits: number;
+  term: string | null;
+  status: CourseStatus;
+  grade: string | null;
+  is_pass_fail: boolean;
+  position: {
+    x: number;
+    y: number;
+  };
+  notes: string | null;
+  prerequisites: CoursePrerequisite[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type GraphDetail = {
   graph: {
     id: string;
@@ -59,7 +94,30 @@ export type CourseDetail = {
 
 async function fetchGraphDetail(graphId: string): Promise<GraphDetail> {
   const response = await api.get(`api/v1/graphs/${graphId}`);
-  return response.json<GraphDetail>();
+  const data = (await response.json()) as {
+    graph: GraphDetail["graph"];
+    courses: CourseRaw[];
+  };
+  return {
+    graph: data.graph,
+    courses: data.courses.map((course) => ({
+      id: course.id,
+      graph_id: course.graph_id,
+      code: course.code,
+      title: course.title,
+      credits: course.credits,
+      term: course.term,
+      status: course.status,
+      grade: course.grade,
+      is_pass_fail: course.is_pass_fail,
+      position_x: course.position?.x ?? 0,
+      position_y: course.position?.y ?? 0,
+      notes: course.notes,
+      prerequisites: course.prerequisites,
+      created_at: course.created_at,
+      updated_at: course.updated_at,
+    })),
+  };
 }
 
 export function useGraphDetailQuery(graphId: string) {

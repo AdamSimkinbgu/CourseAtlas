@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from app.domain.models import Course, CourseStatus, Graph, TemplateMetadata
@@ -31,8 +31,8 @@ class TemplateService:
         self.course_repo = course_repo
         self.template_repo = template_repo
 
-    def list_public_templates(self) -> list[TemplateView]:
-        views: list[TemplateView] = []
+    def list_public_templates(self) -> List[TemplateView]:
+        views: List[TemplateView] = []
         graphs = self.template_repo.list_public_graphs()
         for graph in graphs:
             meta = self.template_repo.get_metadata_for_graph(graph.id)
@@ -42,9 +42,9 @@ class TemplateService:
     def publish_template(
         self,
         graph_id: UUID,
-        tags: list[str],
-        summary: str | None,
-        preview_url: str | None,
+        tags: List[str],
+        summary: Optional[str],
+        preview_url: Optional[str],
     ) -> TemplateView:
         graph = self.graph_repo.get(graph_id)
         if graph is None:
@@ -67,7 +67,7 @@ class TemplateService:
             raise NotFoundError("Template not found")
         clone = self.graph_repo.duplicate(template, new_owner_id=user_id)
         source_courses = self.course_repo.list_by_graph(template.id)
-        course_map: dict[UUID, Course] = {}
+        course_map: Dict[UUID, Course] = {}
         for course in source_courses:
             cloned_course = Course(
                 graph_id=clone.id,
@@ -88,18 +88,30 @@ class TemplateService:
 
         for original in source_courses:
             cloned_course = course_map[original.id]
-            translated = []
+            translated: List[Dict[str, Optional[str]]] = []
             for prereq in original.prerequisites:
                 course_id = prereq.get("course_id")
                 if not course_id:
                     continue
                 source_id = UUID(str(course_id))
-                if source_id in course_map:
+                mapped = course_map.get(source_id)
+                if mapped:
                     translated.append(
                         {
-                            "course_id": str(course_map[source_id].id),
+                            "course_id": str(mapped.id),
                             "condition": prereq.get("condition"),
                         }
                     )
             self.course_repo.update(cloned_course, prerequisites=translated)
+        if template.container_assignments:
+            translated_assignments: Dict[str, str] = {}
+            for original_id, container_id in template.container_assignments.items():
+                try:
+                    original_uuid = UUID(str(original_id))
+                except ValueError:
+                    continue
+                mapped = course_map.get(original_uuid)
+                if mapped:
+                    translated_assignments[str(mapped.id)] = container_id
+            self.graph_repo.update(clone, container_assignments=translated_assignments)
         return clone

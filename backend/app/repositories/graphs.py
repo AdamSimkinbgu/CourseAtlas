@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -33,7 +33,7 @@ class GraphRepository:
     def get(self, graph_id: UUID) -> Optional[Graph]:
         return self.session.get(Graph, graph_id)
 
-    def list_by_owner(self, owner_id: UUID) -> list[Graph]:
+    def list_by_owner(self, owner_id: UUID) -> List[Graph]:
         statement = (
             select(Graph)
             .where(Graph.owner_id == owner_id)
@@ -48,6 +48,8 @@ class GraphRepository:
             description=source_graph.description,
             is_template=False,
             visibility=source_graph.visibility,
+            containers=list(source_graph.containers),
+            container_assignments=dict(source_graph.container_assignments),
         )
         self.session.add(clone)
         self.session.flush()
@@ -59,7 +61,7 @@ class GraphRepository:
         self.session.delete(graph)
 
     # Template metadata helpers -------------------------------------------------
-    def list_public_templates(self) -> list[Graph]:
+    def list_public_templates(self) -> List[Graph]:
         statement = select(Graph).where(Graph.is_template.is_(True))
         return list(self.session.exec(statement))
 

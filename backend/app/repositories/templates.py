@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -19,7 +19,7 @@ class TemplateRepository:
     def get_metadata(self, template_id: UUID) -> Optional[TemplateMetadata]:
         return self.session.get(TemplateMetadata, template_id)
 
-    def list_public_graphs(self) -> list[Graph]:
+    def list_public_graphs(self) -> List[Graph]:
         statement = select(Graph).where(Graph.is_template.is_(True))
         return list(self.session.exec(statement))
 
@@ -29,7 +29,7 @@ class TemplateRepository:
         self.session.refresh(metadata)
         return metadata
 
-    def list_metadata(self) -> list[TemplateMetadata]:
+    def list_metadata(self) -> List[TemplateMetadata]:
         statement = select(TemplateMetadata)
         return list(self.session.exec(statement))
 

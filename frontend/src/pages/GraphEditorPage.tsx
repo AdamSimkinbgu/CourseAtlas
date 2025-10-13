@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -115,6 +116,39 @@ const DEFAULT_CONTAINER_FALLBACK = {
   },
 };
 
+const ACCENT_COLORS: Record<ThemeMode, string> = {
+  light: "#2563eb",
+  dark: "#60a5fa",
+};
+
+function withAlpha(color: string, alpha: number): string {
+  const trimmed = color.trim().toLowerCase();
+  if (trimmed.startsWith("rgba(")) {
+    const [r, g, b] = trimmed
+      .slice(5, -1)
+      .split(",")
+      .slice(0, 3)
+      .map((value) => Number.parseFloat(value));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  if (trimmed.startsWith("rgb(")) {
+    const [r, g, b] = trimmed
+      .slice(4, -1)
+      .split(",")
+      .map((value) => Number.parseFloat(value));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.length === 4 ? trimmed.replace(/./g, (c) => (c === "#" ? "#" : `${c}${c}`)) : trimmed;
+    const bigint = Number.parseInt(hex.slice(1), 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return color;
+}
+
 type SampleGraphCourse = {
   id?: string;
   code: string;
@@ -208,10 +242,11 @@ function CourseNode({ data }: CourseNodeProps) {
   })();
   const statusToken = themeTokens.status[statusKey];
 
+  const accentColor = ACCENT_COLORS[theme];
   const baseShadow =
     theme === "dark"
-      ? "0 24px 55px -32px rgba(2,6,23,0.85)"
-      : "0 20px 45px -30px rgba(15,23,42,0.28)";
+      ? "0 18px 60px -32px rgba(2, 6, 23, 0.9)"
+      : "0 18px 36px -28px rgba(15, 23, 42, 0.35)";
   const haloShadow = isSelected
     ? `0 0 0 4px ${themeTokens.halo.active}`
     : isPrerequisiteHighlight
@@ -230,65 +265,85 @@ function CourseNode({ data }: CourseNodeProps) {
     prereqCount ? `${prereqCount} prereq${prereqCount === 1 ? "" : "s"}` : "No prereqs",
   ];
 
+  const cardBackground =
+    theme === "dark"
+      ? `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(30,41,59,0.02)), ${statusToken.bg}`
+      : `linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.45)), ${statusToken.bg}`;
+
+  const statusChipStyle = {
+    backgroundColor: withAlpha(statusToken.bg, theme === "dark" ? 0.38 : 0.32),
+    borderColor: statusToken.border,
+    color: statusToken.text,
+  };
+
   return (
     <div
-      className="group relative w-72 cursor-pointer rounded-2xl border p-5 text-left transition"
+      className={`course-node${isSelected ? " course-node--selected" : ""}${
+        isPrerequisiteHighlight && !isSelected ? " course-node--highlighted" : ""
+      }${hasUnmetPrereqs && statusKey === "blocked" ? " course-node--blocked" : ""}`}
       style={{
-        background: `linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.55)) , ${statusToken.bg}`,
-        color: statusToken.text,
+        background: cardBackground,
         borderColor: statusToken.border,
         boxShadow: combinedShadow,
-        opacity: hasUnmetPrereqs && statusKey === "blocked" ? 0.78 : 1,
       }}
       onDoubleClick={() => onSelect(course.id)}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border !border-slate-300 !bg-white shadow-sm dark:!border-slate-600 dark:!bg-slate-950"
-        style={{ top: "50%", transform: "translate(-50%, -50%)" }}
+        style={{
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: accentColor,
+          border: theme === "dark" ? "2px solid #0b1220" : "2px solid #fff",
+        }}
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-3 !w-3 !border !border-slate-300 !bg-white shadow-sm dark:!border-slate-600 dark:!bg-slate-950"
-        style={{ top: "50%", transform: "translate(50%, -50%)" }}
+        style={{
+          top: "50%",
+          transform: "translate(50%, -50%)",
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: accentColor,
+          border: theme === "dark" ? "2px solid #0b1220" : "2px solid #fff",
+        }}
       />
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-[0.32em] text-slate-500/80 dark:text-slate-200/80">
-            {course.code}
-          </span>
-          <h3 className="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">
-            {course.title}
-          </h3>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          {gradeBadge ? (
-            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700 shadow-sm dark:bg-slate-900/60 dark:text-slate-100">
-              {gradeBadge}
-            </span>
-          ) : null}
-          <span className="rounded-full border border-white/40 bg-white/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/90 shadow-sm dark:border-slate-500/40 dark:bg-slate-800/70">
+      <div className="course-node__header">
+        <span className="course-node__codepill" title={course.code}>
+          {course.code}
+        </span>
+        <span
+          className="course-node__dot"
+          style={{ background: accentColor, boxShadow: `0 0 0 2px ${withAlpha(accentColor, 0.35)}` }}
+        />
+        <h3 className="course-node__title" title={course.title}>
+          {course.title}
+        </h3>
+        <div className="course-node__header-meta">
+          {gradeBadge ? <span className="course-node__grade">{gradeBadge}</span> : null}
+          <span className="course-node__status" style={statusChipStyle}>
             {displayStatus}
           </span>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
-        {metaChips.map((chip, index) => (
-          <div
-            key={`${chip}-${index}`}
-            className="flex items-center gap-2 rounded-full border border-white/40 bg-white/60 px-2 py-1 shadow-sm dark:border-slate-500/50 dark:bg-slate-900/40"
-          >
-            <span className="font-medium text-slate-700 dark:text-slate-200">{chip}</span>
-          </div>
-        ))}
+      <div className="course-node__meta">
+        <div className="course-node__pills">
+          {metaChips.map((chip, index) => (
+            <span key={`${chip}-${index}`} className="course-node__pill">
+              {chip}
+            </span>
+          ))}
+        </div>
+        {hasUnmetPrereqs ? (
+          <p className="course-node__subtext">Prerequisites not met — course blocked</p>
+        ) : null}
       </div>
-      {hasUnmetPrereqs ? (
-        <p className="mt-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
-          Prerequisites not met — course blocked
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -298,28 +353,42 @@ type ContainerNodeProps = NodeProps<ContainerNodeData>;
 function ContainerNode({ data, selected }: ContainerNodeProps) {
   const { container, onSelect, theme, courseCount } = data;
   const visual = resolveContainerVisuals(container, theme);
+  const borderColor = visual.border;
+  const backgroundColor = withAlpha(visual.fill, theme === "dark" ? 0.06 : 0.12);
+  const headerBackground =
+    theme === "dark"
+      ? `linear-gradient(180deg, ${withAlpha(borderColor, 0.12)}, transparent)`
+      : `linear-gradient(180deg, ${withAlpha(borderColor, 0.14)}, rgba(255,255,255,0.7))`;
+  const countBackground = withAlpha(borderColor, theme === "dark" ? 0.32 : 0.16);
+
   return (
     <div
-      className="group relative h-full w-full rounded-3xl border border-dashed transition"
+      className={`container-node${selected ? " container-node--selected" : ""}`}
       style={{
-        backgroundColor: visual.fill,
-        borderColor: visual.border,
+        borderColor,
+        background: backgroundColor,
         boxShadow: selected
           ? `0 0 0 3px ${THEME_TOKENS[theme].halo.active}, ${visual.shadow}`
           : visual.shadow,
-      }}
+        "--container-header-bg": headerBackground,
+        "--container-border-color": borderColor,
+        "--container-count-bg": countBackground,
+        "--container-count-color": theme === "dark" ? "#94a3b8" : "#475569",
+      } as CSSProperties}
       onDoubleClick={() => onSelect(container.id)}
     >
       <NodeResizer
         minWidth={280}
         minHeight={220}
         isVisible={selected}
-        lineClassName="border border-dashed border-slate-400/50 dark:border-slate-500/40"
-        handleClassName="h-3 w-3 rounded-sm border border-slate-300 bg-white dark:border-slate-500 dark:bg-slate-950"
+        lineClassName="container-node__resizer-line"
+        handleClassName="container-node__resizer-handle"
       />
-      <div className="pointer-events-none flex items-center justify-between px-5 py-4 text-sm font-semibold text-slate-700 dark:text-slate-100">
-        <span className="text-lg font-semibold">{container.title}</span>
-        <span className="rounded-full border border-current px-2 py-0.5 text-[11px] font-medium uppercase text-slate-500 dark:text-slate-300">
+      <div className="container-node__header">
+        <span className="container-node__title" title={container.title}>
+          {container.title}
+        </span>
+        <span className="container-node__count" aria-label={`${courseCount} courses`}>
           {courseCount === 1 ? "1 course" : `${courseCount} courses`}
         </span>
       </div>
@@ -403,6 +472,7 @@ export function GraphEditorPage() {
   const nodesRef = useRef<Node<EditorNodeData>[]>([]);
   const edgesRef = useRef<Edge[]>([]);
   const assignmentsRef = useRef<Record<string, string>>(courseAssignments);
+  const containerPersistTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -415,6 +485,14 @@ export function GraphEditorPage() {
   useEffect(() => {
     assignmentsRef.current = courseAssignments;
   }, [courseAssignments]);
+
+  useEffect(() => {
+    return () => {
+      if (containerPersistTimeoutRef.current !== null) {
+        window.clearTimeout(containerPersistTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const openInspectorForCourse = useCallback(
     (courseId: string) => {
@@ -507,16 +585,44 @@ export function GraphEditorPage() {
 
   const updateGraphMutation = useUpdateGraphMutation(graphId ?? "");
 
-  const persistContainers = useCallback(() => {
+  const flushContainerPersistence = useCallback(async () => {
     if (!graphId) return;
     const serialized = serializeContainersFromNodes();
-    updateGraphMutation.mutate({ containers: serialized });
+    try {
+      await updateGraphMutation.mutateAsync({ containers: serialized });
+    } catch (error) {
+      console.error("Failed to persist containers", error);
+    }
   }, [graphId, serializeContainersFromNodes, updateGraphMutation]);
+
+  const scheduleContainerPersistence = useCallback(() => {
+    if (containerPersistTimeoutRef.current !== null) {
+      window.clearTimeout(containerPersistTimeoutRef.current);
+    }
+    containerPersistTimeoutRef.current = window.setTimeout(() => {
+      flushContainerPersistence().finally(() => {
+        containerPersistTimeoutRef.current = null;
+      });
+    }, 300);
+  }, [flushContainerPersistence]);
 
   const persistAssignments = useCallback(
     (assignments: Record<string, string>) => {
       if (!graphId) return;
-      updateGraphMutation.mutate({ container_assignments: assignments });
+      const sanitized: Record<string, string> = {};
+      const validCourseIds = new Set(
+        nodesRef.current.filter((node) => node.type === "course").map((node) => node.id)
+      );
+      for (const [courseId, containerId] of Object.entries(assignments)) {
+        if (
+          typeof containerId === "string" &&
+          containerId &&
+          validCourseIds.has(courseId)
+        ) {
+          sanitized[courseId] = containerId;
+        }
+      }
+      updateGraphMutation.mutate({ container_assignments: sanitized });
     },
     [graphId, updateGraphMutation]
   );
@@ -646,7 +752,6 @@ export function GraphEditorPage() {
             y: Number.isFinite(container.position?.y) ? container.position.y : 0,
           },
         };
-        const visuals = resolveContainerVisuals(normalized, theme);
         return {
           id: normalized.id,
           type: "container" as const,
@@ -662,8 +767,6 @@ export function GraphEditorPage() {
             width: normalized.width,
             height: normalized.height,
             zIndex: 0,
-            backgroundColor: visuals.fill,
-            borderColor: visuals.border,
           },
           draggable: true,
           selectable: true,
@@ -722,7 +825,11 @@ export function GraphEditorPage() {
           target: course.id,
           type: "smoothstep",
           animated: !unmet,
-          style: { stroke: unmet ? "#f97316" : "#94a3b8" },
+          style: {
+            stroke: unmet ? "#f97316" : "#74809a",
+            strokeWidth: unmet ? 2.6 : 2,
+            opacity: 0.95,
+          },
         });
       });
     });
@@ -755,10 +862,10 @@ export function GraphEditorPage() {
           )
       );
       if (affectsContainer) {
-        setTimeout(() => persistContainers(), 0);
+        scheduleContainerPersistence();
       }
     },
-    [onNodesChangeInternal, persistContainers]
+    [onNodesChangeInternal, scheduleContainerPersistence]
   );
 
   const handleEdgesChange = useCallback(
@@ -805,7 +912,7 @@ export function GraphEditorPage() {
         setEdges(previous.edges);
         setTimeout(() => {
           persistAssignments(previous.assignments);
-          persistContainers();
+          scheduleContainerPersistence();
         }, 0);
       },
       redo: () => {
@@ -825,11 +932,11 @@ export function GraphEditorPage() {
         setEdges(next.edges);
         setTimeout(() => {
           persistAssignments(next.assignments);
-          persistContainers();
+          scheduleContainerPersistence();
         }, 0);
       },
     }),
-    [persistAssignments, persistContainers, setCourseAssignments, setEdges, setNodes]
+    [persistAssignments, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
   );
 
   const handleNodeDragStop = useCallback(
@@ -837,7 +944,7 @@ export function GraphEditorPage() {
       if (node.type === "container") {
         setTimeout(() => {
           pushHistory();
-          persistContainers();
+          void flushContainerPersistence();
         }, 0);
         return;
       }
@@ -850,8 +957,10 @@ export function GraphEditorPage() {
         await updateCourseMutation.mutateAsync({
           courseId: id,
           data: {
-            position_x: position.x,
-            position_y: position.y,
+            position: {
+              x: position.x,
+              y: position.y,
+            },
           },
         });
         setTimeout(() => pushHistory(), 0);
@@ -859,7 +968,7 @@ export function GraphEditorPage() {
         console.error("Failed to persist position", error);
       }
     },
-    [persistContainers, pushHistory, updateCourseMutation]
+    [flushContainerPersistence, pushHistory, updateCourseMutation]
   );
 
   const handleConnect = useCallback(
@@ -960,7 +1069,6 @@ export function GraphEditorPage() {
         y: existingContainers.length * 40,
       },
     };
-    const visuals = resolveContainerVisuals(container, theme);
     setNodes((nds) => [
       ...nds,
       {
@@ -977,8 +1085,6 @@ export function GraphEditorPage() {
           width: container.width,
           height: container.height,
           zIndex: 0,
-          backgroundColor: visuals.fill,
-          borderColor: visuals.border,
         },
         draggable: true,
         selectable: true,
@@ -986,9 +1092,9 @@ export function GraphEditorPage() {
     ]);
     setTimeout(() => {
       pushHistory();
-      persistContainers();
+      scheduleContainerPersistence();
     }, 0);
-  }, [openInspectorForContainer, persistContainers, pushHistory, setNodes, theme]);
+  }, [openInspectorForContainer, pushHistory, scheduleContainerPersistence, setNodes, theme]);
 
   const handleUpdateContainer = useCallback(
     (containerId: string, updates: Partial<ContainerShape>) => {
@@ -1006,27 +1112,21 @@ export function GraphEditorPage() {
             merged.palette_id = updates.palette_id;
             merged.color = storedContainerColor(updates.palette_id, merged.color);
           }
-          const visuals = resolveContainerVisuals(merged, theme);
           return {
             ...node,
             data: {
               ...data,
               container: merged,
             },
-            style: {
-              ...node.style,
-              backgroundColor: visuals.fill,
-              borderColor: visuals.border,
-            },
           };
         })
       );
       setTimeout(() => {
         pushHistory();
-        persistContainers();
+        scheduleContainerPersistence();
       }, 0);
     },
-    [persistContainers, pushHistory, setNodes, theme]
+    [pushHistory, scheduleContainerPersistence, setNodes, theme]
   );
 
   const handleDeleteSelection = useCallback(async () => {
@@ -1068,7 +1168,7 @@ export function GraphEditorPage() {
     setTimeout(() => {
       pushHistory();
       if (removedContainer) {
-        persistContainers();
+        scheduleContainerPersistence();
       }
     }, 0);
   }, [
@@ -1077,8 +1177,8 @@ export function GraphEditorPage() {
     detailQuery,
     handleEdgesDelete,
     persistAssignments,
-    persistContainers,
     pushHistory,
+    scheduleContainerPersistence,
     selectedEdgeIds,
     setEdges,
     setNodes,

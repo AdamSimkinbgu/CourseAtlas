@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, Boolean, Column, Enum, ForeignKey, String, Text, text
@@ -19,8 +19,8 @@ class Visibility(str, enum.Enum):
 
 class CourseStatus(str, enum.Enum):
     PLANNED = "planned"
-    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class TimestampMixin(SQLModel):
@@ -62,6 +62,14 @@ class Graph(TimestampMixin, table=True):
         default=Visibility.PRIVATE,
         sa_column=Column(Enum(Visibility, name="graph_visibility"), nullable=False),
     )
+    containers: List[dict] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False, server_default=text("'[]'")),
+    )
+    container_assignments: Dict[str, str] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default=text("'{}'")),
+    )
 
 
 class Course(TimestampMixin, table=True):
@@ -75,7 +83,14 @@ class Course(TimestampMixin, table=True):
     term: Optional[str] = Field(default=None, sa_column=Column(String(120)))
     status: CourseStatus = Field(
         default=CourseStatus.PLANNED,
-        sa_column=Column(Enum(CourseStatus, name="course_status"), nullable=False),
+        sa_column=Column(
+            Enum(
+                CourseStatus,
+                name="course_status",
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            ),
+            nullable=False,
+        ),
     )
     prerequisites: List[dict] = Field(
         default_factory=list,

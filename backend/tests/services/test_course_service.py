@@ -70,7 +70,7 @@ def test_calculate_gpa_excludes_pass_fail(session):
     graded = courses.add_course(
         CourseCreate(graph_id=graph.id, code="CS", title="CS", credits=3)
     )
-    repo.update(graded, grade=Decimal("3.7"), status=CourseStatus.COMPLETED)
+    repo.update(graded, grade=Decimal("90"), status=CourseStatus.COMPLETED)
     pass_fail = courses.add_course(
         CourseCreate(
             graph_id=graph.id, code="PE", title="PE", credits=2, is_pass_fail=True
@@ -79,6 +79,25 @@ def test_calculate_gpa_excludes_pass_fail(session):
     repo.update(pass_fail, status=CourseStatus.COMPLETED)
 
     summary = courses.calculate_graph_gpa(graph.id)
-    assert summary["gpa"] == Decimal("3.70")
+    assert summary["gpa"] == Decimal("90.00")
     assert summary["credits_attempted"] == Decimal("5")
     assert summary["credits_earned"] == Decimal("5")
+
+
+def test_update_course_grade_sets_status(session):
+    graph, _, courses, _ = setup_graph_and_services(session)
+    course = courses.add_course(
+        CourseCreate(graph_id=graph.id, code="CS101", title="Intro", credits=3)
+    )
+
+    completed = courses.update_course(course.id, {"grade": "84"})
+    assert completed.status is CourseStatus.COMPLETED
+    assert completed.grade == Decimal("84")
+
+    failed = courses.update_course(course.id, {"grade": "12"})
+    assert failed.status is CourseStatus.FAILED
+    assert failed.grade == Decimal("12")
+
+    reset = courses.update_course(course.id, {"grade": None})
+    assert reset.status is CourseStatus.PLANNED
+    assert reset.grade is None

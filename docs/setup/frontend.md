@@ -68,7 +68,12 @@ CI runs the same commands on every push/PR.
 - HTTP helpers live in `src/lib/`, and feature slices live in `src/features/`.
 - Route-level components are under `src/pages/`; shared UI is in `src/components/` and `src/sections/`.
 
-## 6. Troubleshooting
+## 6. Graph editor tips
+
+- Use the floating toolbar inside the graph editor to add courses, import/export JSON, trigger the auto-layout placeholder, or toggle light/dark theme globally.
+- On tablets and phones the inspector drawer stays collapsed; select a course/container and tap "Open details" to slide the panel in, then close it from the overlay header when finished.
+
+## 7. Troubleshooting
 
 - **Failed to fetch API:** Ensure `VITE_API_BASE_URL` points to a running backend and that CORS allows `http://localhost:5173`.
 - **Port already in use (5173):** Stop other Vite instances (`Ctrl+C`) or run `npm run dev -- --port 5174`.

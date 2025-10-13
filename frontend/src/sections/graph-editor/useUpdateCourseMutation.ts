@@ -3,21 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import type { CourseDetail } from "./useGraphDetailQuery";
 
-export type UpdateCoursePayload = Partial<
-  Pick<
-    CourseDetail,
-    | "title"
-    | "code"
-    | "credits"
-    | "term"
-    | "status"
-    | "notes"
-    | "position_x"
-    | "position_y"
-    | "grade"
-    | "is_pass_fail"
-  >
+type EditableCourseFields = Pick<
+  CourseDetail,
+  "title" | "code" | "credits" | "term" | "status" | "notes" | "grade" | "is_pass_fail"
 >;
+
+export type UpdateCoursePayload = Partial<EditableCourseFields> & {
+  position?: { x: number; y: number };
+};
 
 async function updateCourse(courseId: string, payload: UpdateCoursePayload): Promise<CourseDetail> {
   const response = await api.patch(`api/v1/courses/${courseId}`, {
