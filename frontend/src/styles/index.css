@@ -11,6 +11,11 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  --bg-surface: #f8fafc;
+  --bg-surface-elevated: #ffffff;
+  --bg-grid-dot: rgba(148, 163, 184, 0.35);
+  --shadow-sm: 0 16px 35px -24px rgba(15, 23, 42, 0.25);
+  --shadow-md: 0 32px 65px -30px rgba(15, 23, 42, 0.35);
 }
 
 body {
@@ -19,6 +24,11 @@ body {
 
 body.dark {
   @apply bg-slate-950 text-slate-100;
+  --bg-surface: rgba(15, 23, 42, 0.9);
+  --bg-surface-elevated: rgba(26, 32, 44, 0.92);
+  --bg-grid-dot: rgba(71, 85, 105, 0.45);
+  --shadow-sm: 0 24px 50px -28px rgba(0, 0, 0, 0.65);
+  --shadow-md: 0 44px 80px -36px rgba(0, 0, 0, 0.75);
 }
 
 a {

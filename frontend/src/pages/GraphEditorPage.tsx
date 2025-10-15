@@ -11,6 +11,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   Node,
@@ -24,6 +25,7 @@ import ReactFlow, {
   useNodesState,
   NodeProps,
   NodeResizer,
+  type MiniMapNodeProps,
   type Connection,
   type EdgeChange,
   type NodeChange,
@@ -63,6 +65,7 @@ import {
 } from "../sections/graph-editor/sampleGraphImport";
 import { Skeleton } from "../components/Skeleton";
 import { useQueryClient } from "@tanstack/react-query";
+import type { ContainerShape } from "../sections/graph-editor/types";
 import {
   CONTAINER_PALETTE,
   GRADE_PASS_THRESHOLD,
@@ -70,6 +73,33 @@ import {
   type ContainerPaletteColor,
   type StatusKey,
 } from "../styles/tokens";
+import { useCollisionDetection } from "../sections/graph-editor/useCollisionDetection";
+import {
+  COURSE_GAP,
+  COURSE_SLOT_HEIGHT,
+  COURSE_SLOT_WIDTH,
+  CONTAINER_HEADER_HEIGHT,
+  CONTAINER_PADDING,
+  GRID_CONFIG,
+  SLOT_HORIZONTAL_SPACING,
+  SLOT_VERTICAL_SPACING,
+  analyseOccupiedSlots,
+  collectSlotSet,
+  containerSizeForGrid,
+  deriveMetricsFromSize,
+  findFirstAvailableSlot,
+  metricsFromLayouts,
+  pickLeastPopulatedEdge,
+  positionToSlot,
+  snap,
+  snapPoint,
+  snapSize,
+  slotKey,
+  slotToPosition,
+  expandContainerLayouts,
+  type CourseLayout,
+  type Slot,
+} from "../sections/graph-editor/layout";
 import smallSampleRaw from "../fixtures/smallSampleGraph.json";
 import largeSampleRaw from "../fixtures/largeSampleGraph.json";
 
@@ -91,25 +121,293 @@ type ContainerNodeData = {
   onSelect: (containerId: string) => void;
   theme: ThemeMode;
   courseCount: number;
-};
-
-type ContainerShape = {
-  id: string;
-  title: string;
-  palette_id?: string | null;
-  color: string;
-  width: number;
-  height: number;
-  position: { x: number; y: number };
+  grid?: {
+    columns: number;
+    rows: number;
+  };
 };
 
 type ThemeMode = "light" | "dark";
+
+function resolveCourseStatusKey(
+  course: CourseDetail,
+  hasUnmetPrereqs: boolean
+): StatusKey {
+  if (hasUnmetPrereqs) return "blocked";
+  if (course.status === "completed") return "completed";
+  if (course.status === "failed") return "failed";
+  return "planned";
+}
 
 type HistoryEntry = {
   nodes: Node<EditorNodeData>[];
   edges: Edge[];
   assignments: Record<string, string>;
 };
+
+type ContainerLayoutState = {
+  position: { x: number; y: number };
+  metrics: {
+    columns: number;
+    rows: number;
+    width: number;
+    height: number;
+  };
+  courseLayouts: Map<string, CourseLayout>;
+};
+
+function layOutCoursesInContainer(
+  courseIds: string[],
+  containerPosition: { x: number; y: number },
+  initialMetrics?: {
+    columns: number;
+    rows: number;
+    width: number;
+    height: number;
+  }
+): ContainerLayoutState {
+  let position = snapPoint(containerPosition);
+  let metrics = initialMetrics ?? {
+    columns: 1,
+    rows: 1,
+    width: containerSizeForGrid(1, 1).width,
+    height: containerSizeForGrid(1, 1).height,
+  };
+
+  let layouts: CourseLayout[] = [];
+
+  courseIds.forEach((courseId) => {
+    const occupied = collectSlotSet(layouts);
+    let slot = findFirstAvailableSlot(occupied, metrics);
+
+    if (!slot) {
+      const edge = pickLeastPopulatedEdge(layouts, metrics);
+      const expansion = expandContainerLayouts(edge, position, metrics, layouts);
+      metrics = expansion.metrics;
+      position = expansion.containerPosition;
+      layouts = expansion.layouts;
+      slot = expansion.slotForNewCourse;
+    }
+
+    const absolutePosition = slotToPosition(position, slot);
+    layouts = [...layouts, { id: courseId, slot, position: absolutePosition }];
+  });
+
+  if (layouts.length > 0) {
+    const rowValues = layouts.map((layout) => layout.slot.row);
+    const columnValues = layouts.map((layout) => layout.slot.column);
+    const minRow = Math.min(...rowValues);
+    const minColumn = Math.min(...columnValues);
+    if (minColumn > 0 || minRow > 0) {
+      position = snapPoint({
+        x: position.x + minColumn * SLOT_HORIZONTAL_SPACING,
+        y: position.y + minRow * SLOT_VERTICAL_SPACING,
+      });
+      layouts = layouts.map((layout) => {
+        const slot: Slot = {
+          row: layout.slot.row - minRow,
+          column: layout.slot.column - minColumn,
+        };
+        return {
+          id: layout.id,
+          slot,
+          position: slotToPosition(position, slot),
+        };
+      });
+    } else {
+      layouts = layouts.map((layout) => ({
+        id: layout.id,
+        slot: layout.slot,
+        position: slotToPosition(position, layout.slot),
+      }));
+    }
+  }
+
+  const finalMetrics = metricsFromLayouts(layouts);
+  const courseLayouts = new Map<string, CourseLayout>();
+  layouts.forEach((layout) => {
+    courseLayouts.set(layout.id, {
+      id: layout.id,
+      slot: layout.slot,
+      position: layout.position,
+    });
+  });
+
+  return {
+    position,
+    metrics: finalMetrics,
+    courseLayouts,
+  };
+}
+
+function gatherAssignedCourseIds(
+  assignments: Record<string, string>,
+  containerId: string,
+  courseOrderIndex: Map<string, number>
+): string[] {
+  return Object.entries(assignments)
+    .filter(([, targetId]) => targetId === containerId)
+    .map(([courseId]) => courseId)
+    .sort(
+      (a, b) => (courseOrderIndex.get(a) ?? 0) - (courseOrderIndex.get(b) ?? 0)
+    );
+}
+
+function reflowContainerNodes(
+  nodes: Node<EditorNodeData>[],
+  containerId: string,
+  assignments: Record<string, string>,
+  courseOrderIndex: Map<string, number>,
+  debug: boolean = false
+): Node<EditorNodeData>[] {
+  const containerIndex = nodes.findIndex(
+    (node) => node.id === containerId && node.type === "container"
+  );
+  if (containerIndex === -1) return nodes;
+  const containerNode = nodes[containerIndex] as Node<ContainerNodeData>;
+
+  const assignedCourseIds = gatherAssignedCourseIds(
+    assignments,
+    containerId,
+    courseOrderIndex
+  );
+
+  const initialMetrics = containerNode.data.grid
+    ? {
+        columns: containerNode.data.grid.columns,
+        rows: containerNode.data.grid.rows,
+        width: (containerNode.style?.width as number) ?? containerNode.data.container.width,
+        height:
+          (containerNode.style?.height as number) ?? containerNode.data.container.height,
+      }
+    : undefined;
+
+  const layoutState = layOutCoursesInContainer(
+    assignedCourseIds,
+    containerNode.position,
+    initialMetrics
+  );
+
+  if (import.meta.env?.DEV && debug) {
+    console.debug("[grid debug] container", containerId, {
+      assignedCourseIds,
+      position: layoutState.position,
+      metrics: layoutState.metrics,
+    });
+  }
+
+  const updatedContainer: Node<ContainerNodeData> = {
+    ...containerNode,
+    position: layoutState.position,
+    data: {
+      ...containerNode.data,
+      container: {
+        ...containerNode.data.container,
+        position: layoutState.position,
+        width: layoutState.metrics.width,
+        height: layoutState.metrics.height,
+      },
+      courseCount: assignedCourseIds.length,
+      grid: {
+        columns: layoutState.metrics.columns,
+        rows: layoutState.metrics.rows,
+      },
+    },
+    style: {
+      ...containerNode.style,
+      width: layoutState.metrics.width,
+      height: layoutState.metrics.height,
+    },
+  };
+
+  const result = [...nodes];
+  result[containerIndex] = updatedContainer;
+
+  assignedCourseIds.forEach((courseId) => {
+    const courseIndex = result.findIndex((node) => node.id === courseId);
+    if (courseIndex === -1) return;
+    const courseNode = result[courseIndex] as Node<CourseNodeData>;
+    const layout = layoutState.courseLayouts.get(courseId);
+    if (!layout) return;
+    const relativePosition = {
+      x: layout.position.x - layoutState.position.x,
+      y: layout.position.y - layoutState.position.y,
+    };
+    result[courseIndex] = {
+      ...courseNode,
+      position: relativePosition,
+      positionAbsolute: layout.position,
+      parentNode: containerId,
+      extent: "parent",
+      data: {
+        ...courseNode.data,
+        course: {
+          ...courseNode.data.course,
+          position_x: layout.position.x,
+          position_y: layout.position.y,
+        },
+      },
+    } satisfies Node<CourseNodeData>;
+  });
+
+  return result;
+}
+
+function parkCourseOutsideContainer(
+  containerNode: Node<ContainerNodeData>,
+  coursePosition: { x: number; y: number }
+): { x: number; y: number } {
+  const containerPosition = snapPoint(containerNode.position);
+  const width =
+    (containerNode.style?.width as number) ?? containerNode.data.container.width;
+  const height =
+    (containerNode.style?.height as number) ?? containerNode.data.container.height;
+
+  const left = containerPosition.x;
+  const right = containerPosition.x + width;
+  const top = containerPosition.y;
+  const bottom = containerPosition.y + height;
+
+  const courseCenterX = coursePosition.x + COURSE_SLOT_WIDTH / 2;
+  const courseCenterY = coursePosition.y + COURSE_SLOT_HEIGHT / 2;
+
+  const distances = {
+    left: Math.abs(courseCenterX - left),
+    right: Math.abs(right - courseCenterX),
+    top: Math.abs(courseCenterY - top),
+    bottom: Math.abs(bottom - courseCenterY),
+  } as const;
+
+  const entries = Object.entries(distances) as Array<
+    ["left" | "right" | "top" | "bottom", number]
+  >;
+  const [edge] = entries.sort((a, b) => a[1] - b[1])[0] ?? ["right", 0];
+  const offset = GRID_CONFIG.UNIT;
+
+  switch (edge) {
+    case "left":
+      return snapPoint({
+        x: left - COURSE_SLOT_WIDTH - offset,
+        y: coursePosition.y,
+      });
+    case "right":
+      return snapPoint({
+        x: right + offset,
+        y: coursePosition.y,
+      });
+    case "top":
+      return snapPoint({
+        x: coursePosition.x,
+        y: top - COURSE_SLOT_HEIGHT - offset,
+      });
+    case "bottom":
+    default:
+      return snapPoint({
+        x: coursePosition.x,
+        y: bottom + offset,
+      });
+  }
+}
 
 const PALETTE_BY_ID = new Map<string, ContainerPaletteColor>(
   CONTAINER_PALETTE.map((entry) => [entry.id, entry])
@@ -219,12 +517,7 @@ function CourseNode({ data }: CourseNodeProps) {
   const { course, hasUnmetPrereqs, onSelect, theme, isSelected, isPrerequisiteHighlight } = data;
 
   const themeTokens = THEME_TOKENS[theme];
-  const statusKey: StatusKey = (() => {
-    if (hasUnmetPrereqs) return "blocked";
-    if (course.status === "completed") return "completed";
-    if (course.status === "failed") return "failed";
-    return "planned";
-  })();
+  const statusKey = resolveCourseStatusKey(course, hasUnmetPrereqs);
   const statusToken = themeTokens.status[statusKey];
 
   const accentColor = ACCENT_COLORS[theme];
@@ -390,22 +683,6 @@ const nodeTypes = {
 
 const EMPTY_ASSIGNMENTS: Record<string, string> = {};
 
-function assignmentsEqual(
-  current: Record<string, string>,
-  incoming: Record<string, string>
-): boolean {
-  if (current === incoming) return true;
-  const currentKeys = Object.keys(current);
-  const incomingKeys = Object.keys(incoming);
-  if (currentKeys.length !== incomingKeys.length) return false;
-  for (const key of currentKeys) {
-    if (current[key] !== incoming[key]) {
-      return false;
-    }
-  }
-  return true;
-}
-
 const THEME_STORAGE_KEY = "course-atlas-theme";
 
 function randomId() {
@@ -466,6 +743,11 @@ function GraphEditorPageInner() {
 
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState<EditorNodeData>([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
+  const {
+    handleNodeDrag: detectNodeDrag,
+    handleNodeDragStop: detectNodeDragStop,
+    handleNodeDragStart: detectNodeDragStart,
+  } = useCollisionDetection(nodes);
 
   const initialViewportIsLarge =
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 1024px)").matches;
@@ -477,6 +759,8 @@ function GraphEditorPageInner() {
   const [isLargeViewport, setIsLargeViewport] = useState(initialViewportIsLarge);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGraphActionsOpen, setIsGraphActionsOpen] = useState(false);
+  const [showGridDebug, setShowGridDebug] = useState(false);
+  const [showMiniMap, setShowMiniMap] = useState(true);
   const {
     courses: selectedCourseIds,
     containers: selectedContainerIds,
@@ -504,6 +788,11 @@ function GraphEditorPageInner() {
   const assignmentsRef = useRef<Record<string, string>>(courseAssignments);
   const containerPersistTimeoutRef = useRef<number | null>(null);
   const graphMutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const gridDebugRef = useRef(false);
+
+  useEffect(() => {
+    gridDebugRef.current = showGridDebug;
+  }, [showGridDebug]);
 
   const updateGraphCache = useCallback(
     (updater: (draft: GraphDetail) => void) => {
@@ -524,10 +813,13 @@ function GraphEditorPageInner() {
       graphMutationQueueRef.current = graphMutationQueueRef.current
         .catch(() => undefined)
         .then(task);
-      return graphMutationQueueRef.current.catch((error) => {
-        console.error("Graph mutation failed", error);
-        throw error;
-      });
+      return graphMutationQueueRef.current.then(
+        () => undefined,
+        (error) => {
+          console.error("Graph mutation failed", error);
+          throw error;
+        }
+      );
     },
     []
   );
@@ -543,6 +835,126 @@ function GraphEditorPageInner() {
   useEffect(() => {
     assignmentsRef.current = courseAssignments;
   }, [courseAssignments]);
+
+  const courseOrderIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    (detailQuery.data?.courses ?? []).forEach((course, index) => {
+      map.set(course.id, index);
+    });
+    return map;
+  }, [detailQuery.data?.courses]);
+
+  const courseDetailMap = useMemo(() => {
+    const map = new Map<string, CourseDetail>();
+    (detailQuery.data?.courses ?? []).forEach((course) => {
+      map.set(course.id, course);
+    });
+    return map;
+  }, [detailQuery.data?.courses]);
+
+  const reflowAfterAssignment = useCallback(
+    (
+      nodes: Node<EditorNodeData>[],
+      courseId: string,
+      previousParent: string | null,
+      nextParent: string | null,
+      assignments: Record<string, string>
+    ) => {
+      let updated = [...nodes];
+      const courseIndex = updated.findIndex((node) => node.id === courseId);
+      if (courseIndex === -1) return updated;
+
+      const originalCourseNode = updated[courseIndex] as Node<CourseNodeData>;
+      const courseDetail =
+        courseDetailMap.get(courseId) ?? originalCourseNode.data.course;
+
+      const findContainerNode = (id: string | null) =>
+        id
+          ? (updated.find((node) => node.id === id) as
+              | Node<ContainerNodeData>
+              | undefined)
+          : undefined;
+
+      const previousContainerNode = findContainerNode(previousParent);
+      const absoluteBefore =
+        previousParent && previousContainerNode
+          ? snapPoint({
+              x: previousContainerNode.position.x + originalCourseNode.position.x,
+              y: previousContainerNode.position.y + originalCourseNode.position.y,
+            })
+          : snapPoint({
+              x: originalCourseNode.position.x,
+              y: originalCourseNode.position.y,
+            });
+
+      let courseNode: Node<CourseNodeData> = { ...originalCourseNode };
+
+      if (!nextParent) {
+        const parkedPosition = previousContainerNode
+          ? parkCourseOutsideContainer(previousContainerNode, absoluteBefore)
+          : snapPoint(absoluteBefore);
+        if (import.meta.env?.DEV && gridDebugRef.current) {
+          console.debug("[grid debug] park course", {
+            courseId,
+            previousParent,
+            position: parkedPosition,
+          });
+        }
+        courseNode = {
+          ...courseNode,
+          parentNode: undefined,
+          extent: undefined,
+          position: parkedPosition,
+          positionAbsolute: undefined,
+          data: {
+            ...courseNode.data,
+            course: {
+              ...courseDetail,
+              position_x: parkedPosition.x,
+              position_y: parkedPosition.y,
+            },
+          },
+        } satisfies Node<CourseNodeData>;
+      } else {
+        courseNode = {
+          ...courseNode,
+          parentNode: nextParent,
+          extent: "parent",
+        } satisfies Node<CourseNodeData>;
+        if (import.meta.env?.DEV && gridDebugRef.current) {
+          console.debug("[grid debug] stage course for container", {
+            courseId,
+            nextParent,
+          });
+        }
+      }
+
+      updated[courseIndex] = courseNode;
+
+      if (previousParent) {
+        updated = reflowContainerNodes(
+          updated,
+          previousParent,
+          assignments,
+          courseOrderIndex,
+          gridDebugRef.current
+        );
+      }
+
+      if (nextParent) {
+        updated = reflowContainerNodes(
+          updated,
+          nextParent,
+          assignments,
+          courseOrderIndex,
+          gridDebugRef.current
+        );
+      }
+
+      return updated;
+    },
+    [courseDetailMap, courseOrderIndex]
+  );
 
   useEffect(() => {
     return () => {
@@ -607,20 +1019,27 @@ function GraphEditorPageInner() {
     futureRef.current = [];
   }, []);
 
+  const lastDetailTimestampRef = useRef<number>(-1);
+
   const serializeContainersFromNodes = useCallback((): ContainerShape[] => {
     return nodesRef.current
       .filter((node) => node.type === "container")
       .map((node) => {
         const data = node.data as ContainerNodeData;
+        const snappedPosition = snapPoint(node.position);
+        const snappedSize = snapSize({
+          width: typeof node.style?.width === "number" ? node.style.width : data.container.width,
+          height:
+            typeof node.style?.height === "number" ? node.style.height : data.container.height,
+        });
         return {
           id: node.id,
           title: data.container.title,
           palette_id: data.container.palette_id ?? null,
           color: storedContainerColor(data.container.palette_id ?? null, data.container.color),
-          width: typeof node.style?.width === "number" ? node.style.width : data.container.width,
-          height:
-            typeof node.style?.height === "number" ? node.style.height : data.container.height,
-          position: node.position,
+          width: snappedSize.width,
+          height: snappedSize.height,
+          position: snappedPosition,
         };
       });
   }, []);
@@ -712,8 +1131,6 @@ function GraphEditorPageInner() {
         json: payload,
       });
       await detailQuery.refetch();
-      setSelectedCourseId(null);
-      setSelectedContainerId(null);
     },
     [detailQuery, graphId]
   );
@@ -756,48 +1173,75 @@ function GraphEditorPageInner() {
   );
 
   useEffect(() => {
-    if (!detailQuery.data) {
+    const detail = detailQuery.data;
+    if (!detail) {
       setNodes([]);
       setEdges([]);
+      lastDetailTimestampRef.current = detailQuery.dataUpdatedAt ?? Date.now();
       return;
     }
 
-    const initialAssignments =
-      detailQuery.data.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
-    if (!assignmentsEqual(courseAssignments, initialAssignments)) {
-      setCourseAssignments(initialAssignments);
-      assignmentsRef.current = initialAssignments;
-    } else {
-      assignmentsRef.current = courseAssignments;
+    const dataTimestamp = detailQuery.dataUpdatedAt ?? Date.now();
+    if (
+      lastDetailTimestampRef.current === dataTimestamp &&
+      nodesRef.current.length > 0
+    ) {
+      return;
     }
+    lastDetailTimestampRef.current = dataTimestamp;
 
-    const membersByContainer = new Map<string, CourseDetail[]>();
-    const coursesList = detailQuery.data.courses;
-    for (const course of coursesList) {
-      const containerId = initialAssignments[course.id];
-      if (!containerId) continue;
-      const list = membersByContainer.get(containerId);
-      if (list) {
-        list.push(course);
-      } else {
-        membersByContainer.set(containerId, [course]);
-      }
-    }
+    const remoteAssignments = detail.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
+    setCourseAssignments(remoteAssignments);
+    assignmentsRef.current = remoteAssignments;
 
-    const containerNodes: Node<ContainerNodeData>[] = detailQuery.data.graph.containers.map(
+    const courseOrderIndex = new Map(
+      detail.courses.map((course, index) => [course.id, index])
+    );
+
+    const containerLayouts = new Map<string, ContainerLayoutState>();
+
+    const containerNodes: Node<ContainerNodeData>[] = detail.graph.containers.map(
       (container) => {
+        const basePosition = snapPoint({
+          x: Number.isFinite(container.position?.x) ? container.position.x : 0,
+          y: Number.isFinite(container.position?.y) ? container.position.y : 0,
+        });
+
+        const assignedCourseIds = detail.courses
+          .filter((course) => remoteAssignments[course.id] === container.id)
+          .sort(
+            (a, b) =>
+              (courseOrderIndex.get(a.id) ?? 0) -
+              (courseOrderIndex.get(b.id) ?? 0)
+          )
+          .map((course) => course.id);
+
+        const initialMetrics =
+          container.width && container.height
+            ? deriveMetricsFromSize({
+                width: container.width,
+                height: container.height,
+              })
+            : undefined;
+
+        const layoutState = layOutCoursesInContainer(
+          assignedCourseIds,
+          basePosition,
+          initialMetrics
+        );
+
+        containerLayouts.set(container.id, layoutState);
+
         const normalized: ContainerShape = {
           id: container.id,
           title: container.title,
           palette_id: container.palette_id ?? null,
           color: container.color,
-          width: container.width ?? 320,
-          height: container.height ?? 200,
-          position: {
-            x: Number.isFinite(container.position?.x) ? container.position.x : 0,
-            y: Number.isFinite(container.position?.y) ? container.position.y : 0,
-          },
+          width: layoutState.metrics.width,
+          height: layoutState.metrics.height,
+          position: layoutState.position,
         };
+
         return {
           id: normalized.id,
           type: "container" as const,
@@ -807,7 +1251,11 @@ function GraphEditorPageInner() {
             container: normalized,
             onSelect: openInspectorForContainer,
             theme,
-            courseCount: membersByContainer.get(container.id)?.length ?? 0,
+            courseCount: assignedCourseIds.length,
+            grid: {
+              columns: layoutState.metrics.columns,
+              rows: layoutState.metrics.rows,
+            },
           },
           style: {
             width: normalized.width,
@@ -820,23 +1268,63 @@ function GraphEditorPageInner() {
         } satisfies Node<ContainerNodeData>;
       }
     );
-    const courses = detailQuery.data.courses;
 
+    const containerNodeMap = new Map(containerNodes.map((node) => [node.id, node]));
+
+    const courses = detail.courses;
     const courseNodes: Node<CourseNodeData>[] = courses.map((course) => {
-      const assignments = initialAssignments;
-      const parent = assignments[course.id];
+      const parent = remoteAssignments[course.id];
       const hasUnmetPrereqs = course.prerequisites.some((item) => {
         const prereq = courses.find((candidate) => candidate.id === item.course_id);
         return !prereq || prereq.status !== "completed";
       });
 
+      if (parent) {
+        const layoutState = containerLayouts.get(parent);
+        const containerNode = containerNodeMap.get(parent);
+        const layout = layoutState?.courseLayouts.get(course.id);
+        const containerPosition =
+          layoutState?.position ?? containerNode?.position ?? snapPoint({ x: 0, y: 0 });
+        const absolutePosition =
+          layout?.position ?? slotToPosition(containerPosition, { row: 0, column: 0 });
+        const relativePosition = {
+          x: absolutePosition.x - containerPosition.x,
+          y: absolutePosition.y - containerPosition.y,
+        };
+        return {
+          id: course.id,
+          type: "course",
+          position: relativePosition,
+          positionAbsolute: absolutePosition,
+          data: {
+            kind: "course",
+            course,
+            hasUnmetPrereqs,
+            onSelect: openInspectorForCourse,
+            theme,
+            isSelected: false,
+            isPrerequisiteHighlight: false,
+          },
+          parentNode: parent,
+          extent: "parent",
+          style: { zIndex: 1 },
+          draggable: true,
+          selectable: true,
+          selected: false,
+          sourcePosition: Position.Bottom,
+          targetPosition: Position.Top,
+        } satisfies Node<CourseNodeData>;
+      }
+
+      const snapped = snapPoint({
+        x: Number.isFinite(course.position_x) ? course.position_x : 0,
+        y: Number.isFinite(course.position_y) ? course.position_y : 0,
+      });
+
       return {
         id: course.id,
         type: "course",
-        position: {
-          x: Number.isFinite(course.position_x) ? course.position_x : 0,
-          y: Number.isFinite(course.position_y) ? course.position_y : 0,
-        },
+        position: snapped,
         data: {
           kind: "course",
           course,
@@ -846,15 +1334,13 @@ function GraphEditorPageInner() {
           isSelected: false,
           isPrerequisiteHighlight: false,
         },
-        parentNode: parent,
-        extent: parent ? "parent" : undefined,
         style: { zIndex: 1 },
         draggable: true,
         selectable: true,
         selected: false,
         sourcePosition: Position.Bottom,
         targetPosition: Position.Top,
-      };
+      } satisfies Node<CourseNodeData>;
     });
 
     const edgesList: Edge[] = [];
@@ -877,20 +1363,22 @@ function GraphEditorPageInner() {
       });
     });
 
-  const nextNodes = [...containerNodes, ...courseNodes];
-  setNodes(nextNodes);
-  setEdges(edgesList);
-  historyRef.current = [];
-  futureRef.current = [];
-  pushHistory();
-}, [
-  courseAssignments,
-  detailQuery.data,
-  pushHistory,
-  setEdges,
-  setNodes,
-  theme,
-]);
+    const nextNodes = [...containerNodes, ...courseNodes];
+    setNodes(nextNodes);
+    setEdges(edgesList);
+    historyRef.current = [];
+    futureRef.current = [];
+    pushHistory();
+  }, [
+    detailQuery.data,
+    detailQuery.dataUpdatedAt,
+    openInspectorForContainer,
+    openInspectorForCourse,
+    pushHistory,
+    setEdges,
+    setNodes,
+    theme,
+  ]);
 
   useEffect(() => {
     if (!detailQuery.data) return;
@@ -1043,23 +1531,79 @@ function GraphEditorPageInner() {
   );
 
   const handleNodeDragStop = useCallback(
-    async (_: unknown, node: Node<EditorNodeData>) => {
+    (_: unknown, node: Node<EditorNodeData>) => {
       if (node.type === "container") {
-        setTimeout(() => {
-          pushHistory();
-          void flushContainerPersistence();
-        }, 0);
-        return;
-      }
-      if (node.type !== "course") {
+        const snapped = snapPoint(node.position);
+        setNodes((prev) => {
+          const adjusted = [...prev];
+          const containerIndex = adjusted.findIndex(
+            (candidate) => candidate.id === node.id && candidate.type === "container"
+          );
+          if (containerIndex !== -1) {
+            const existing = adjusted[containerIndex] as Node<ContainerNodeData>;
+            adjusted[containerIndex] = {
+              ...existing,
+              position: snapped,
+              data: {
+                ...existing.data,
+                container: {
+                  ...existing.data.container,
+                  position: snapped,
+                },
+              },
+            } satisfies Node<ContainerNodeData>;
+          }
+          return reflowContainerNodes(
+            adjusted,
+            node.id,
+            assignmentsRef.current,
+            courseOrderIndex,
+            gridDebugRef.current
+          );
+        });
+        scheduleContainerPersistence();
         pushHistory();
         return;
       }
-      const { id, position } = node;
-      enqueueCoursePositionUpdate(id, { x: position.x, y: position.y });
-      setTimeout(() => pushHistory(), 0);
+
+      if (node.type === "course") {
+        const parentId = (node as unknown as { parentNode?: string }).parentNode ?? null;
+        if (parentId) {
+          setNodes((prev) =>
+            reflowContainerNodes(
+              prev,
+              parentId,
+              assignmentsRef.current,
+              courseOrderIndex,
+              gridDebugRef.current
+            )
+          );
+        } else {
+          const snapped = snapPoint(node.position);
+          setNodes((prev) =>
+            prev.map((candidate) =>
+              candidate.id === node.id && candidate.type === "course"
+                ? ({
+                    ...candidate,
+                    position: snapped,
+                    data: {
+                      ...candidate.data,
+                      course: {
+                        ...(candidate.data as CourseNodeData).course,
+                        position_x: snapped.x,
+                        position_y: snapped.y,
+                      },
+                    },
+                  } as Node<CourseNodeData>)
+                : candidate
+            )
+          );
+          void enqueueCoursePositionUpdate(node.id, snapped);
+        }
+        pushHistory();
+      }
     },
-    [enqueueCoursePositionUpdate, flushContainerPersistence, pushHistory]
+    [courseOrderIndex, enqueueCoursePositionUpdate, pushHistory, scheduleContainerPersistence, setNodes]
   );
 
   const handleNodeClick = useCallback(
@@ -1162,29 +1706,36 @@ function GraphEditorPageInner() {
   const handleAssignContainer = useCallback(
     (courseId: string, containerId: string | "") => {
       setCourseAssignments((prev) => {
-        const next = { ...prev };
-        if (!containerId) {
-          delete next[courseId];
+        const previousParent = prev[courseId] ?? null;
+        const nextParent = containerId ? containerId : null;
+        const nextAssignments = { ...prev };
+        if (!nextParent) {
+          delete nextAssignments[courseId];
         } else {
-          next[courseId] = containerId;
+          nextAssignments[courseId] = nextParent;
         }
-        void persistAssignmentsSafe(next);
-        return next;
+
+        void persistAssignmentsSafe(nextAssignments);
+
+        setNodes((prevNodes) =>
+          reflowAfterAssignment(
+            prevNodes,
+            courseId,
+            previousParent,
+            nextParent,
+            nextAssignments
+          )
+        );
+
+        setTimeout(() => {
+          pushHistory();
+          scheduleContainerPersistence();
+        }, 0);
+
+        return nextAssignments;
       });
-      setNodes((nds) =>
-        nds.map((node) =>
-          node.id === courseId
-            ? {
-                ...node,
-                parentNode: containerId || undefined,
-                extent: containerId ? "parent" : undefined,
-              }
-            : node
-        )
-      );
-      setTimeout(() => pushHistory(), 0);
     },
-    [persistAssignmentsSafe, pushHistory, setNodes]
+    [persistAssignmentsSafe, pushHistory, reflowAfterAssignment, scheduleContainerPersistence]
   );
 
   const handleAddContainer = useCallback(() => {
@@ -1192,17 +1743,19 @@ function GraphEditorPageInner() {
     const existingContainers = nodesRef.current.filter((node) => node.type === "container");
     const nextIndex = existingContainers.length + 1;
     const palette = CONTAINER_PALETTE[Math.floor(Math.random() * CONTAINER_PALETTE.length)];
+    const basePosition = snapPoint({
+      x: existingContainers.length * SLOT_HORIZONTAL_SPACING,
+      y: existingContainers.length * SLOT_VERTICAL_SPACING,
+    });
+    const baseMetrics = containerSizeForGrid(1, 1);
     const container: ContainerShape = {
       id: newId,
       title: `Group ${nextIndex}`,
       palette_id: palette.id,
       color: palette.light.fill,
-      width: 320,
-      height: 200,
-      position: {
-        x: existingContainers.length * 40,
-        y: existingContainers.length * 40,
-      },
+      width: baseMetrics.width,
+      height: baseMetrics.height,
+      position: basePosition,
     };
     setNodes((nds) => [
       ...nds,
@@ -1215,6 +1768,8 @@ function GraphEditorPageInner() {
           container,
           onSelect: openInspectorForContainer,
           theme,
+          courseCount: 0,
+          grid: { columns: 1, rows: 1 },
         },
         style: {
           width: container.width,
@@ -1379,8 +1934,6 @@ function GraphEditorPageInner() {
         };
 
         await submitImportPayload(payload);
-        setSelectedCourseId(null);
-        setSelectedContainerId(null);
       } catch (error) {
         console.error("Failed to import graph", error);
         alert("Import failed. Ensure the file was exported from Course Atlas and try again.");
@@ -1886,6 +2439,22 @@ function GraphEditorPageInner() {
         },
       },
       {
+        label: showMiniMap ? "Hide minimap" : "Show minimap",
+        disabled: false,
+        action: () => {
+          setShowMiniMap((prev) => !prev);
+          setIsGraphActionsOpen(false);
+        },
+      },
+      {
+        label: showGridDebug ? "Hide grid debug" : "Show grid debug",
+        disabled: false,
+        action: () => {
+          setShowGridDebug((prev) => !prev);
+          setIsGraphActionsOpen(false);
+        },
+      },
+      {
         label: "Toggle theme",
         disabled: false,
         action: () => {
@@ -1906,6 +2475,8 @@ function GraphEditorPageInner() {
       isExporting,
       isImporting,
       reactFlowToolbarActions,
+      showMiniMap,
+      showGridDebug,
     ]
   );
 
@@ -1976,6 +2547,8 @@ function GraphEditorPageInner() {
                   instance.fitView({ padding: canvasFitViewPadding });
                 }}
                 minZoom={canvasMinZoom}
+                showGridDebug={showGridDebug}
+                showMiniMap={showMiniMap}
               />
             </ReactFlowProvider>
 
@@ -2109,6 +2682,8 @@ type GraphEditorCanvasProps = {
   onSelectionChange: (params: OnSelectionChangeParams) => void;
   onNodeClick: (event: unknown, node: Node<EditorNodeData>) => void;
   onPaneClick: () => void;
+  onNodeDrag: (event: unknown, node: Node<EditorNodeData>) => void;
+  onNodeDragStart: (event: unknown, node: Node<EditorNodeData>) => void;
   onNodeDragStop: (event: unknown, node: Node<EditorNodeData>) => void;
   onNodeDoubleClick: (event: unknown, node: Node<EditorNodeData>) => void;
   onConnect: (connection: Connection) => void;
@@ -2116,6 +2691,8 @@ type GraphEditorCanvasProps = {
   onReady: (instance: ReactFlowInstance) => void;
   minZoom: number;
   theme: ThemeMode;
+  showGridDebug: boolean;
+  showMiniMap: boolean;
 };
 
 function GraphEditorCanvas({
@@ -2126,6 +2703,8 @@ function GraphEditorCanvas({
   onSelectionChange,
   onNodeClick,
   onPaneClick,
+  onNodeDrag,
+  onNodeDragStart,
   onNodeDragStop,
   onNodeDoubleClick,
   onConnect,
@@ -2133,16 +2712,203 @@ function GraphEditorCanvas({
   onReady,
   minZoom,
   theme,
+  showGridDebug,
+  showMiniMap,
 }: GraphEditorCanvasProps) {
-  const flowBackground = theme === "dark" ? "bg-slate-950/85" : "bg-slate-100";
-  const gridOverlay =
-    theme === "dark"
-      ? "[background-image:radial-gradient(circle_at_top_left,_rgba(148,163,184,0.05),_transparent_70%),radial-gradient(circle_at_bottom_right,_rgba(100,116,139,0.05),_transparent_70%)]"
-      : "bg-white";
+  const themeTokens = THEME_TOKENS[theme];
+  const flowBackground = theme === "dark" ? "bg-slate-950/90" : "bg-slate-100";
+  const canvasStyle = useMemo(
+    () => ({
+      backgroundColor: themeTokens.surface.canvas,
+    }),
+    [themeTokens.surface.canvas]
+  );
+  const miniMapStyle = useMemo(
+    () => ({
+      height: 168,
+      width: 220,
+      background: themeTokens.minimap.background,
+      borderRadius: 12,
+      boxShadow: themeTokens.shadows.sm,
+      border:
+        theme === "dark"
+          ? "1px solid rgba(15,23,42,0.55)"
+          : "1px solid rgba(148,163,184,0.25)",
+      bottom: 16,
+      left: 16,
+    }),
+    [themeTokens.minimap.background, themeTokens.shadows.sm, theme]
+  );
+  const controlsStyle = useMemo(
+    () => ({
+      background: themeTokens.surface.panel,
+      borderRadius: 12,
+      boxShadow: themeTokens.shadows.sm,
+      border:
+        theme === "dark"
+          ? "1px solid rgba(15,23,42,0.55)"
+          : "1px solid rgba(148,163,184,0.25)",
+    }),
+    [themeTokens.surface.panel, themeTokens.shadows.sm, theme]
+  );
+  const miniMapNodeColor = useCallback(
+    (node: Node<EditorNodeData>) => {
+      if (node.type === "container") {
+        const data = node.data as ContainerNodeData | undefined;
+        if (data?.container) {
+          const visuals = resolveContainerVisuals(data.container, theme);
+          return withAlpha(visuals.fill, theme === "dark" ? 0.7 : 0.5);
+        }
+        return themeTokens.minimap.containerFill;
+      }
+
+      if (node.type === "course") {
+        const data = node.data as CourseNodeData | undefined;
+        if (data) {
+          const statusKey = resolveCourseStatusKey(data.course, data.hasUnmetPrereqs);
+          return withAlpha(themeTokens.status[statusKey].bg, theme === "dark" ? 0.9 : 0.7);
+        }
+      }
+
+      return themeTokens.minimap.courseFill;
+    },
+    [theme, themeTokens]
+  );
+  const miniMapNodeStrokeColor = useCallback(
+    (node: Node<EditorNodeData>) => {
+      if (node.type === "container") {
+        const data = node.data as ContainerNodeData | undefined;
+        if (data?.container) {
+          const visuals = resolveContainerVisuals(data.container, theme);
+          return withAlpha(visuals.border, theme === "dark" ? 0.95 : 0.75);
+        }
+        return themeTokens.minimap.containerStroke;
+      }
+
+      if (node.type === "course") {
+        const data = node.data as CourseNodeData | undefined;
+        if (data) {
+          const statusKey = resolveCourseStatusKey(data.course, data.hasUnmetPrereqs);
+          return themeTokens.status[statusKey].border;
+        }
+      }
+
+      return themeTokens.minimap.courseStroke;
+    },
+    [theme, themeTokens]
+  );
+  const miniMapNodeClassName = useCallback(
+    (node: Node<EditorNodeData>) =>
+      node.type === "container" ? "minimap-node minimap-node--container" : "minimap-node minimap-node--course",
+    []
+  );
+  const MiniMapNodeComponent = useMemo(() => {
+    const themeMode = theme;
+    return function MiniMapNodeComponent({
+      id,
+      x,
+      y,
+      width,
+      height,
+      borderRadius,
+      color,
+      strokeColor,
+      strokeWidth,
+      className,
+      onClick,
+    }: MiniMapNodeProps) {
+      const isCourse = className.includes("minimap-node--course");
+      const strokeFallback =
+        strokeColor ||
+        (isCourse ? themeTokens.minimap.courseStroke : themeTokens.minimap.containerStroke);
+      const padding = Math.max(1, Math.min(width, height) * 0.08);
+      const headerHeight = Math.max(
+        2,
+        Math.min(height * 0.3, height - padding * 2 - 2)
+      );
+      const baseRect = (
+        <rect
+          width={width}
+          height={height}
+          rx={borderRadius}
+          ry={borderRadius}
+          fill={color}
+          stroke={strokeFallback}
+          strokeWidth={strokeWidth}
+          className={className}
+          onClick={
+            onClick ? (event) => onClick(event, id) : undefined
+          }
+        />
+      );
+
+      if (!isCourse || width < 12 || height < 12) {
+        return (
+          <g transform={`translate(${x}, ${y})`}>
+            {baseRect}
+          </g>
+        );
+      }
+
+      const headerFill = withAlpha(strokeFallback, themeMode === "dark" ? 0.45 : 0.22);
+      const lineColorStrong = withAlpha(strokeFallback, themeMode === "dark" ? 0.55 : 0.35);
+      const lineColor = withAlpha(strokeFallback, themeMode === "dark" ? 0.35 : 0.2);
+
+      const bodyWidth = Math.max(4, width - padding * 2);
+      const firstLineY = padding + headerHeight + Math.max(1, height * 0.05);
+      const lineHeight = Math.max(1.2, height * 0.08);
+      const lineGap = Math.max(1, height * 0.06);
+
+      const lines = [
+        { width: bodyWidth * 0.95, y: firstLineY, color: lineColorStrong },
+        { width: bodyWidth * 0.7, y: firstLineY + lineHeight + lineGap, color: lineColor },
+        { width: bodyWidth * 0.85, y: firstLineY + (lineHeight + lineGap) * 2, color: lineColor },
+      ].filter((line) => line.y + lineHeight <= height - padding);
+
+      return (
+        <g transform={`translate(${x}, ${y})`}>
+          {baseRect}
+          <rect
+            x={padding}
+            y={padding}
+            width={bodyWidth}
+            height={headerHeight}
+            rx={Math.min(4, borderRadius)}
+            ry={Math.min(4, borderRadius)}
+            fill={headerFill}
+          />
+          {lines.map((line, index) => (
+            <rect
+              key={`${id}-line-${index}`}
+              x={padding}
+              y={line.y}
+              width={Math.max(3, line.width)}
+              height={lineHeight}
+              rx={lineHeight / 2}
+              ry={lineHeight / 2}
+              fill={line.color}
+            />
+          ))}
+        </g>
+      );
+    };
+  }, [theme, themeTokens]);
 
   return (
     <div className={`relative h-full w-full overflow-hidden ${flowBackground}`}>
+      {showGridDebug ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[1]"
+          style={{
+            backgroundSize: `${GRID_CONFIG.UNIT}px ${GRID_CONFIG.UNIT}px`,
+            backgroundImage:
+              "linear-gradient(to right, rgba(59,130,246,0.12) 1px, transparent 1px), " +
+              "linear-gradient(to bottom, rgba(59,130,246,0.12) 1px, transparent 1px)",
+          }}
+        />
+      ) : null}
       <ReactFlow
+        style={canvasStyle}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
@@ -2150,6 +2916,8 @@ function GraphEditorCanvas({
         onSelectionChange={onSelectionChange}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onNodeDrag={onNodeDrag}
+        onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
         onNodeDoubleClick={onNodeDoubleClick}
         onConnect={onConnect}
@@ -2157,17 +2925,35 @@ function GraphEditorCanvas({
         nodeTypes={nodeTypes}
         fitView
         minZoom={minZoom}
-        className={`h-full w-full ${gridOverlay}`}
+        className="h-full w-full"
         defaultEdgeOptions={{ type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } }}
         proOptions={{ hideAttribution: true }}
         onInit={onReady}
+        snapToGrid
+        snapGrid={[GRID_CONFIG.UNIT, GRID_CONFIG.UNIT]}
       >
-        <MiniMap pannable zoomable />
-        <Controls />
+        {showMiniMap ? (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={miniMapNodeColor}
+            nodeStrokeColor={miniMapNodeStrokeColor}
+            nodeStrokeWidth={1.2}
+            nodeClassName={miniMapNodeClassName}
+            nodeComponent={MiniMapNodeComponent}
+            style={miniMapStyle}
+          />
+        ) : null}
+        <Controls
+          position="bottom-right"
+          showInteractive={false}
+          style={controlsStyle}
+        />
         <Background
-          gap={28}
-          size={1.8}
-          color={theme === "dark" ? "rgba(31,41,55,0.6)" : "rgba(148,163,184,0.35)"}
+          variant={BackgroundVariant.Dots}
+          gap={GRID_CONFIG.UNIT}
+          size={1}
+          color={themeTokens.canvas.grid}
         />
       </ReactFlow>
     </div>

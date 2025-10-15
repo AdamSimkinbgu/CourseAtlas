@@ -26,6 +26,21 @@ type ThemeTokens = {
     background: string;
     grid: string;
   };
+  surface: {
+    canvas: string;
+    panel: string;
+  };
+  shadows: {
+    sm: string;
+    md: string;
+  };
+  minimap: {
+    background: string;
+    courseFill: string;
+    courseStroke: string;
+    containerFill: string;
+    containerStroke: string;
+  };
 };
 
 export const THEME_TOKENS: Record<"light" | "dark", ThemeTokens> = {
@@ -60,6 +75,21 @@ export const THEME_TOKENS: Record<"light" | "dark", ThemeTokens> = {
       background: "#f5f7fa",
       grid: "rgba(220, 226, 234, 0.7)",
     },
+    surface: {
+      canvas: "#f8fafc",
+      panel: "#ffffff",
+    },
+    shadows: {
+      sm: "0 16px 35px -24px rgba(15, 23, 42, 0.25)",
+      md: "0 32px 65px -30px rgba(15, 23, 42, 0.35)",
+    },
+    minimap: {
+      background: "rgba(255, 255, 255, 0.92)",
+      courseFill: "#0f172a",
+      courseStroke: "rgba(15, 23, 42, 0.55)",
+      containerFill: "rgba(79, 70, 229, 0.32)",
+      containerStroke: "rgba(79, 70, 229, 0.65)",
+    },
   },
   dark: {
     status: {
@@ -91,6 +121,21 @@ export const THEME_TOKENS: Record<"light" | "dark", ThemeTokens> = {
     canvas: {
       background: "#11151c",
       grid: "rgba(42, 51, 68, 0.9)",
+    },
+    surface: {
+      canvas: "rgba(15, 23, 42, 0.9)",
+      panel: "rgba(26, 32, 44, 0.92)",
+    },
+    shadows: {
+      sm: "0 24px 55px -28px rgba(0, 0, 0, 0.65)",
+      md: "0 44px 84px -36px rgba(0, 0, 0, 0.75)",
+    },
+    minimap: {
+      background: "rgba(15, 23, 42, 0.92)",
+      courseFill: "rgba(226, 232, 240, 0.9)",
+      courseStroke: "rgba(148, 163, 184, 0.65)",
+      containerFill: "rgba(99, 102, 241, 0.45)",
+      containerStroke: "rgba(129, 140, 248, 0.85)",
     },
   },
 };

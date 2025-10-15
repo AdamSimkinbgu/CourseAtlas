@@ -91,7 +91,7 @@ export function normaliseCourses(
   type PendingCourse = {
     originalId: string;
     course: ImportCoursePayload & {
-      prerequisites: Array<{ course_id: string; condition?: string | null }>;
+      prerequisites: Array<{ course_id: string; condition: string | null }>;
     };
   };
 
@@ -125,7 +125,12 @@ export function normaliseCourses(
           y: Number(course.position?.y ?? 0),
         },
         notes: course.notes ?? null,
-        prerequisites: Array.isArray(course.prerequisites) ? course.prerequisites : [],
+        prerequisites: Array.isArray(course.prerequisites)
+          ? course.prerequisites.map((item) => ({
+              course_id: item.course_id,
+              condition: item?.condition ?? null,
+            }))
+          : [],
       },
     };
   });
@@ -222,7 +227,7 @@ export function buildMultiSelectionSummary(
   const selectedContainerSet = new Set(selectedContainerIds);
   const groupMap = new Map<
     string,
-    { container: ContainerShape | undefined; isSelected: boolean; courses: CourseDetail[] }
+    { container: ContainerSummary | undefined; isSelected: boolean; courses: CourseDetail[] }
   >();
 
   selectedContainerIds.forEach((id) => {

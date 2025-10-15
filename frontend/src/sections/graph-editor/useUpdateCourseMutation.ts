@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
-import type { CourseDetail } from "./useGraphDetailQuery";
+import type { CourseDetail, GraphDetail } from "./useGraphDetailQuery";
 
 type EditableCourseFields = Pick<
   CourseDetail,
@@ -26,7 +26,7 @@ export function useUpdateCourseMutation(graphId: string) {
     mutationFn: ({ courseId, data }: { courseId: string; data: UpdateCoursePayload }) =>
       updateCourse(courseId, data),
     onSuccess: (updated) => {
-      queryClient.setQueryData(["graph", graphId], (previous) => {
+      queryClient.setQueryData<GraphDetail | undefined>(["graph", graphId], (previous) => {
         if (!previous) return previous;
         return {
           ...previous,
