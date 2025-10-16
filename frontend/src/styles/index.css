@@ -58,14 +58,6 @@ body.dark .course-node {
   color: rgba(226, 232, 240, 0.94);
 }
 
-.course-node:hover {
-  transform: translateY(-2px);
-}
-
-.course-node--selected {
-  transform: translateY(-2px);
-}
-
 .course-node--blocked {
   opacity: 0.9;
 }

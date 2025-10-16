@@ -33,6 +33,7 @@ import ReactFlow, {
   type ReactFlowInstance,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import "../styles/graph-editor-v2.css";
 
 import { api } from "../lib/api";
 import { useHealthQuery } from "../features/health/useHealthQuery";
@@ -110,16 +111,12 @@ type CourseNodeData = {
   course: CourseDetail;
   hasUnmetPrereqs: boolean;
   onSelect: (courseId: string) => void;
-  theme: ThemeMode;
-  isSelected: boolean;
-  isPrerequisiteHighlight: boolean;
 };
 
 type ContainerNodeData = {
   kind: "container";
   container: ContainerShape;
   onSelect: (containerId: string) => void;
-  theme: ThemeMode;
   courseCount: number;
   grid?: {
     columns: number;
@@ -274,12 +271,12 @@ function reflowContainerNodes(
 
   const initialMetrics = containerNode.data.grid
     ? {
-        columns: containerNode.data.grid.columns,
-        rows: containerNode.data.grid.rows,
-        width: (containerNode.style?.width as number) ?? containerNode.data.container.width,
-        height:
-          (containerNode.style?.height as number) ?? containerNode.data.container.height,
-      }
+      columns: containerNode.data.grid.columns,
+      rows: containerNode.data.grid.rows,
+      width: (containerNode.style?.width as number) ?? containerNode.data.container.width,
+      height:
+        (containerNode.style?.height as number) ?? containerNode.data.container.height,
+    }
     : undefined;
 
   const layoutState = layOutCoursesInContainer(
@@ -476,29 +473,29 @@ function resolveContainerVisuals(
   if (paletteEntry) {
     return theme === "dark"
       ? {
-          fill: paletteEntry.dark.fill,
-          border: paletteEntry.dark.border,
-          shadow: CONTAINER_NODE_SHADOW.dark,
-        }
+        fill: paletteEntry.dark.fill,
+        border: paletteEntry.dark.border,
+        shadow: CONTAINER_NODE_SHADOW.dark,
+      }
       : {
-          fill: paletteEntry.light.fill,
-          border: paletteEntry.light.border,
-          shadow: CONTAINER_NODE_SHADOW.light,
-        };
+        fill: paletteEntry.light.fill,
+        border: paletteEntry.light.border,
+        shadow: CONTAINER_NODE_SHADOW.light,
+      };
   }
   const fallbackFill = container.color;
   if (fallbackFill) {
     return theme === "dark"
       ? {
-          fill: fallbackFill,
-          border: DEFAULT_CONTAINER_FALLBACK.dark.border,
-          shadow: DEFAULT_CONTAINER_FALLBACK.dark.shadow,
-        }
+        fill: fallbackFill,
+        border: DEFAULT_CONTAINER_FALLBACK.dark.border,
+        shadow: DEFAULT_CONTAINER_FALLBACK.dark.shadow,
+      }
       : {
-          fill: fallbackFill,
-          border: DEFAULT_CONTAINER_FALLBACK.light.border,
-          shadow: DEFAULT_CONTAINER_FALLBACK.light.shadow,
-        };
+        fill: fallbackFill,
+        border: DEFAULT_CONTAINER_FALLBACK.light.border,
+        shadow: DEFAULT_CONTAINER_FALLBACK.light.shadow,
+      };
   }
   return theme === "dark" ? DEFAULT_CONTAINER_FALLBACK.dark : DEFAULT_CONTAINER_FALLBACK.light;
 }
@@ -514,116 +511,88 @@ function storedContainerColor(paletteId?: string | null, fallback?: string): str
 type CourseNodeProps = NodeProps<CourseNodeData>;
 
 function CourseNode({ data }: CourseNodeProps) {
-  const { course, hasUnmetPrereqs, onSelect, theme, isSelected, isPrerequisiteHighlight } = data;
+  const { course, hasUnmetPrereqs, onSelect } = data;
 
-  const themeTokens = THEME_TOKENS[theme];
-  const statusKey = resolveCourseStatusKey(course, hasUnmetPrereqs);
-  const statusToken = themeTokens.status[statusKey];
-
-  const accentColor = ACCENT_COLORS[theme];
-  const baseShadow =
-    theme === "dark"
-      ? "0 18px 60px -32px rgba(2, 6, 23, 0.9)"
-      : "0 18px 36px -28px rgba(15, 23, 42, 0.35)";
-  const haloShadow = isSelected
-    ? `0 0 0 4px ${themeTokens.halo.active}`
-    : isPrerequisiteHighlight
-      ? `0 0 0 3px ${themeTokens.halo.prerequisite}`
-      : "none";
-  const combinedShadow = haloShadow === "none" ? baseShadow : `${haloShadow}, ${baseShadow}`;
-
-  const displayStatus =
-    course.status.charAt(0).toUpperCase() + course.status.slice(1).replace("_", " ");
+  const displayStatus = course.status.charAt(0).toUpperCase() + course.status.slice(1).replace("_", " ");
+  const statusClassName = `status status--${course.status.replace("_", "-")}`;
+  const nodeClassName = `course-node status-${course.status}${hasUnmetPrereqs ? " course-node--blocked" : ""}`;
   const gradeBadge = course.grade ? Number(course.grade).toFixed(0) : null;
-  const prereqCount = course.prerequisites.length;
-  const metaChips = [
-    `${course.credits} credit${course.credits === 1 ? "" : "s"}`,
-    course.term ? course.term : "Term TBD",
-    course.is_pass_fail ? "Pass / Fail" : "Graded",
-    prereqCount ? `${prereqCount} prereq${prereqCount === 1 ? "" : "s"}` : "No prereqs",
-  ];
+  
+  // Determine grade tier for styling
+  let gradeTier = "";
+  let gradeNum = 0;
+  if (gradeBadge) {
+    gradeNum = Number(gradeBadge);
+    if (gradeNum >= 90) {
+      gradeTier = "grade-gold";
+    } else if (gradeNum >= 70) {
+      gradeTier = "grade-silver";
+    } else if (gradeNum >= 55) { // Assuming 55 is pass threshold
+      gradeTier = "grade-bronze";
+    } else {
+      gradeTier = "grade-fail";
+    }
+  }
 
-  const cardBackground =
-    theme === "dark"
-      ? `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(30,41,59,0.02)), ${statusToken.bg}`
-      : `linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.45)), ${statusToken.bg}`;
-
-  const statusChipStyle = {
-    backgroundColor: withAlpha(statusToken.bg, theme === "dark" ? 0.38 : 0.32),
-    borderColor: statusToken.border,
-    color: statusToken.text,
-  };
+  // Build meta pills: credits, MATH (dept), Level 200, Spring (term)
+  const metaPills = [];
+  metaPills.push(`${course.credits} credit${course.credits === 1 ? "" : "s"}`);
+  // You can extract department from course code or add a dept field
+  // For now, we'll skip dept if not available
+  // metaPills.push("MATH");
+  if (course.code) {
+    // Extract level from code if it contains numbers (e.g., CS204 -> Level 200)
+    const levelMatch = course.code.match(/\d+/);
+    if (levelMatch) {
+      const level = levelMatch[0];
+      metaPills.push(`Level ${level}`);
+    }
+  }
+  if (course.term) {
+    metaPills.push(course.term);
+  }
 
   return (
-    <div
-      className={`course-node${isSelected ? " course-node--selected" : ""}${
-        isPrerequisiteHighlight && !isSelected ? " course-node--highlighted" : ""
-      }${hasUnmetPrereqs && statusKey === "blocked" ? " course-node--blocked" : ""}`}
-      style={{
-        background: cardBackground,
-        borderColor: statusToken.border,
-        boxShadow: combinedShadow,
-      }}
-      onDoubleClick={() => onSelect(course.id)}
-    >
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: accentColor,
-          border: theme === "dark" ? "2px solid #0b1220" : "2px solid #fff",
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{
-          top: "50%",
-          transform: "translate(50%, -50%)",
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: accentColor,
-          border: theme === "dark" ? "2px solid #0b1220" : "2px solid #fff",
-        }}
-      />
+    <div className={nodeClassName} onDoubleClick={() => onSelect(course.id)}>
+      <Handle type="target" position={Position.Left} id="in" />
       <div className="course-node__header">
-        <div className="course-node__title-stack">
-          <span className="course-node__titlepill" title={course.title}>
-            {course.title.length === 0 ? "No title" : course.title}
+        <span className="course-node__codepill" title={course.code}>
+          {course.code}
+        </span>
+        <span className="course-node__dot" />
+        {gradeBadge && (
+          <span className="course-node__grade-wrapper">
+            <span className={`course-node__grade ${gradeTier}`} data-grade={gradeBadge}>
+              {gradeBadge}
+            </span>
+            {gradeTier === "grade-gold" && gradeNum >= 91 && (
+              <>
+                <span className="sparkle sparkle-1">✨</span>
+                <span className="sparkle sparkle-2">✨</span>
+                {gradeNum >= 92 && <span className="sparkle sparkle-3">✨</span>}
+                {gradeNum >= 93 && <span className="sparkle sparkle-4">✨</span>}
+                {gradeNum >= 94 && <span className="sparkle sparkle-5">✨</span>}
+                {gradeNum >= 95 && <span className="sparkle sparkle-6">✨</span>}
+              </>
+            )}
           </span>
-          <span className="course-node__codepill" title={course.code}>
-            {course.code}
-          </span>
-        </div>
-        <span
-          className="course-node__dot"
-          style={{ background: accentColor, boxShadow: `0 0 0 2px ${withAlpha(accentColor, 0.35)}` }}
-        />
-        <div className="course-node__header-meta">
-          {gradeBadge ? <span className="course-node__grade">{gradeBadge}</span> : null}
-          <span className="course-node__status" style={statusChipStyle}>
-            {displayStatus}
-          </span>
-        </div>
+        )}
+        <span className={statusClassName}>{displayStatus}</span>
+      </div>
+      <div className="course-node__body">
+        <h3 className="course-node__title" title={course.title}>
+          {course.title.length === 0 ? "Untitled" : course.title}
+        </h3>
       </div>
       <div className="course-node__meta">
-        <div className="course-node__pills">
-          {metaChips.map((chip, index) => (
-            <span key={`${chip}-${index}`} className="course-node__pill">
-              {chip}
-            </span>
-          ))}
-        </div>
-        {hasUnmetPrereqs ? (
-          <p className="course-node__subtext">Prerequisites not met — course blocked</p>
-        ) : null}
+        {metaPills.map((pill, index) => (
+          <span key={`${pill}-${index}`} className="pill">
+            {pill}
+          </span>
+        ))}
+        {hasUnmetPrereqs && <div className="subtext">Prerequisites not met</div>}
       </div>
+      <Handle type="source" position={Position.Right} id="out" />
     </div>
   );
 }
@@ -631,38 +600,19 @@ function CourseNode({ data }: CourseNodeProps) {
 type ContainerNodeProps = NodeProps<ContainerNodeData>;
 
 function ContainerNode({ data, selected }: ContainerNodeProps) {
-  const { container, onSelect, theme, courseCount } = data;
-  const visual = resolveContainerVisuals(container, theme);
-  const borderColor = visual.border;
-  const backgroundColor = withAlpha(visual.fill, theme === "dark" ? 0.06 : 0.12);
-  const headerBackground =
-    theme === "dark"
-      ? `linear-gradient(180deg, ${withAlpha(borderColor, 0.12)}, transparent)`
-      : `linear-gradient(180deg, ${withAlpha(borderColor, 0.14)}, rgba(255,255,255,0.7))`;
-  const countBackground = withAlpha(borderColor, theme === "dark" ? 0.32 : 0.16);
+  const { container, onSelect, courseCount } = data;
+  
+  // Determine tone based on container properties or default
+  const tone = container.color || "blue"; // You can map container.color to tone variants
+  const toneClassName = `container-node tone-${tone}${selected ? " is-selected" : ""}`;
 
   return (
-    <div
-      className={`container-node${selected ? " container-node--selected" : ""}`}
-      style={{
-        borderColor,
-        background: backgroundColor,
-        boxShadow: selected
-          ? `0 0 0 3px ${THEME_TOKENS[theme].halo.active}, ${visual.shadow}`
-          : visual.shadow,
-        "--container-header-bg": headerBackground,
-        "--container-border-color": borderColor,
-        "--container-count-bg": countBackground,
-        "--container-count-color": theme === "dark" ? "#94a3b8" : "#475569",
-      } as CSSProperties}
-      onDoubleClick={() => onSelect(container.id)}
-    >
-      <NodeResizer
-        minWidth={280}
-        minHeight={220}
-        isVisible={selected}
-        lineClassName="container-node__resizer-line"
-        handleClassName="container-node__resizer-handle"
+    <div className={toneClassName} onDoubleClick={() => onSelect(container.id)}>
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        style={{ opacity: 0.6, top: 20 }}
       />
       <div className="container-node__header">
         <span className="container-node__title" title={container.title}>
@@ -672,6 +622,12 @@ function ContainerNode({ data, selected }: ContainerNodeProps) {
           {courseCount === 1 ? "1 course" : `${courseCount} courses`}
         </span>
       </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out"
+        style={{ opacity: 0.6, top: 20 }}
+      />
     </div>
   );
 }
@@ -796,10 +752,10 @@ function GraphEditorPageInner() {
 
   const updateGraphCache = useCallback(
     (updater: (draft: GraphDetail) => void) => {
-      if (!graphId) return () => {};
+      if (!graphId) return () => { };
       const key = ["graph", graphId] as const;
       const previous = queryClient.getQueryData<GraphDetail>(key);
-      if (!previous) return () => {};
+      if (!previous) return () => { };
       const draft = cloneGraphDetail(previous);
       updater(draft);
       queryClient.setQueryData(key, draft);
@@ -871,21 +827,21 @@ function GraphEditorPageInner() {
       const findContainerNode = (id: string | null) =>
         id
           ? (updated.find((node) => node.id === id) as
-              | Node<ContainerNodeData>
-              | undefined)
+            | Node<ContainerNodeData>
+            | undefined)
           : undefined;
 
       const previousContainerNode = findContainerNode(previousParent);
       const absoluteBefore =
         previousParent && previousContainerNode
           ? snapPoint({
-              x: previousContainerNode.position.x + originalCourseNode.position.x,
-              y: previousContainerNode.position.y + originalCourseNode.position.y,
-            })
+            x: previousContainerNode.position.x + originalCourseNode.position.x,
+            y: previousContainerNode.position.y + originalCourseNode.position.y,
+          })
           : snapPoint({
-              x: originalCourseNode.position.x,
-              y: originalCourseNode.position.y,
-            });
+            x: originalCourseNode.position.x,
+            y: originalCourseNode.position.y,
+          });
 
       let courseNode: Node<CourseNodeData> = { ...originalCourseNode };
 
@@ -1219,9 +1175,9 @@ function GraphEditorPageInner() {
         const initialMetrics =
           container.width && container.height
             ? deriveMetricsFromSize({
-                width: container.width,
-                height: container.height,
-              })
+              width: container.width,
+              height: container.height,
+            })
             : undefined;
 
         const layoutState = layOutCoursesInContainer(
@@ -1232,42 +1188,41 @@ function GraphEditorPageInner() {
 
         containerLayouts.set(container.id, layoutState);
 
-        const normalized: ContainerShape = {
-          id: container.id,
-          title: container.title,
-          palette_id: container.palette_id ?? null,
-          color: container.color,
-          width: layoutState.metrics.width,
-          height: layoutState.metrics.height,
-          position: layoutState.position,
-        };
+      const normalized: ContainerShape = {
+        id: container.id,
+        title: container.title,
+        palette_id: container.palette_id ?? null,
+        color: container.color,
+        width: layoutState.metrics.width,
+        height: layoutState.metrics.height,
+        position: layoutState.position,
+      };
 
-        return {
-          id: normalized.id,
-          type: "container" as const,
-          position: normalized.position,
-          data: {
-            kind: "container" as const,
-            container: normalized,
-            onSelect: openInspectorForContainer,
-            theme,
-            courseCount: assignedCourseIds.length,
-            grid: {
-              columns: layoutState.metrics.columns,
-              rows: layoutState.metrics.rows,
-            },
+      const isSelected = selectedContainerIds.includes(normalized.id);
+      return {
+        id: normalized.id,
+        type: "container" as const,
+        position: normalized.position,
+        data: {
+          kind: "container" as const,
+          container: normalized,
+          onSelect: openInspectorForContainer,
+          courseCount: assignedCourseIds.length,
+          grid: {
+            columns: layoutState.metrics.columns,
+            rows: layoutState.metrics.rows,
           },
-          style: {
-            width: normalized.width,
-            height: normalized.height,
-            zIndex: 0,
-          },
-          draggable: true,
-          selectable: true,
-          selected: false,
-        } satisfies Node<ContainerNodeData>;
-      }
-    );
+        },
+        style: {
+          width: normalized.width,
+          height: normalized.height,
+          zIndex: 0,
+        },
+        draggable: true,
+        selectable: true,
+        selected: isSelected,
+      } satisfies Node<ContainerNodeData>;
+    });
 
     const containerNodeMap = new Map(containerNodes.map((node) => [node.id, node]));
 
@@ -1278,6 +1233,8 @@ function GraphEditorPageInner() {
         const prereq = courses.find((candidate) => candidate.id === item.course_id);
         return !prereq || prereq.status !== "completed";
       });
+
+      const isSelected = selectedCourseIds.includes(course.id);
 
       if (parent) {
         const layoutState = containerLayouts.get(parent);
@@ -1301,16 +1258,13 @@ function GraphEditorPageInner() {
             course,
             hasUnmetPrereqs,
             onSelect: openInspectorForCourse,
-            theme,
-            isSelected: false,
-            isPrerequisiteHighlight: false,
           },
           parentNode: parent,
           extent: "parent",
           style: { zIndex: 1 },
           draggable: true,
           selectable: true,
-          selected: false,
+          selected: isSelected,
           sourcePosition: Position.Bottom,
           targetPosition: Position.Top,
         } satisfies Node<CourseNodeData>;
@@ -1330,14 +1284,11 @@ function GraphEditorPageInner() {
           course,
           hasUnmetPrereqs,
           onSelect: openInspectorForCourse,
-          theme,
-          isSelected: false,
-          isPrerequisiteHighlight: false,
         },
         style: { zIndex: 1 },
         draggable: true,
         selectable: true,
-        selected: false,
+        selected: isSelected,
         sourcePosition: Position.Bottom,
         targetPosition: Position.Top,
       } satisfies Node<CourseNodeData>;
@@ -1375,66 +1326,12 @@ function GraphEditorPageInner() {
     openInspectorForContainer,
     openInspectorForCourse,
     pushHistory,
+    selectedCourseIds,
+    selectedContainerIds,
     setEdges,
     setNodes,
     theme,
   ]);
-
-  useEffect(() => {
-    if (!detailQuery.data) return;
-
-    const primarySelectedCourseId =
-      selectedCourseIds.length === 1 && selectedContainerIds.length === 0
-        ? selectedCourseIds[0]
-        : null;
-    const selectedCourseDetail = primarySelectedCourseId
-      ? detailQuery.data.courses.find((course) => course.id === primarySelectedCourseId) ?? null
-      : null;
-    const prerequisiteSet = new Set(
-      selectedCourseDetail?.prerequisites.map((item) => item.course_id) ?? []
-    );
-
-    setNodes((prevNodes) => {
-      let changed = false;
-      const updated = prevNodes.map((node) => {
-        if (node.type === "course") {
-          const data = node.data as CourseNodeData;
-          const isSelected = selectedCourseIds.includes(node.id);
-          const isPrereqHighlight = primarySelectedCourseId ? prerequisiteSet.has(node.id) : false;
-          if (
-            data.isSelected === isSelected &&
-            data.isPrerequisiteHighlight === isPrereqHighlight &&
-            node.selected === isSelected
-          ) {
-            return node;
-          }
-          changed = true;
-          return {
-            ...node,
-            selected: isSelected,
-            data: {
-              ...data,
-              isSelected,
-              isPrerequisiteHighlight: isPrereqHighlight,
-            },
-          };
-        }
-        if (node.type === "container") {
-          const isSelected = selectedContainerIds.includes(node.id);
-          if (node.selected === isSelected) {
-            return node;
-          }
-          changed = true;
-          return {
-            ...node,
-            selected: isSelected,
-          };
-        }
-        return node;
-      });
-      return changed ? updated : prevNodes;
-    });
-  }, [detailQuery.data, selectedContainerIds, selectedCourseIds, setNodes]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1530,6 +1427,20 @@ function GraphEditorPageInner() {
     [persistAssignmentsSafe, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
   );
 
+  const handleNodeDrag = useCallback(
+    (_event: unknown, node: Node<EditorNodeData>) => {
+      detectNodeDrag(node.id, node.position);
+    },
+    [detectNodeDrag]
+  );
+
+  const handleNodeDragStart = useCallback(
+    () => {
+      detectNodeDragStart();
+    },
+    [detectNodeDragStart]
+  );
+
   const handleNodeDragStop = useCallback(
     (_: unknown, node: Node<EditorNodeData>) => {
       if (node.type === "container") {
@@ -1584,17 +1495,17 @@ function GraphEditorPageInner() {
             prev.map((candidate) =>
               candidate.id === node.id && candidate.type === "course"
                 ? ({
-                    ...candidate,
-                    position: snapped,
-                    data: {
-                      ...candidate.data,
-                      course: {
-                        ...(candidate.data as CourseNodeData).course,
-                        position_x: snapped.x,
-                        position_y: snapped.y,
-                      },
+                  ...candidate,
+                  position: snapped,
+                  data: {
+                    ...candidate.data,
+                    course: {
+                      ...(candidate.data as CourseNodeData).course,
+                      position_x: snapped.x,
+                      position_y: snapped.y,
                     },
-                  } as Node<CourseNodeData>)
+                  },
+                } as Node<CourseNodeData>)
                 : candidate
             )
           );
@@ -2125,33 +2036,33 @@ function GraphEditorPageInner() {
   const inspectorContent = isMultiSelection
     ? multiSelectionData
       ? (
-          <MultiSelectionInspector
-            groups={multiSelectionData.groups}
-            ungroupedCourses={multiSelectionData.ungroupedCourses}
-            totals={selectionTotals}
-          />
-        )
+        <MultiSelectionInspector
+          groups={multiSelectionData.groups}
+          ungroupedCourses={multiSelectionData.ungroupedCourses}
+          totals={selectionTotals}
+        />
+      )
       : placeholderPanel
     : selectedCourse
       ? (
-          <CourseSidePanel
-            course={selectedCourse}
-            assignedContainerId={courseAssignments[selectedCourse.id]}
-            onChange={handleAssignContainer}
-            containerOptions={containerOptions}
+        <CourseSidePanel
+          course={selectedCourse}
+          assignedContainerId={courseAssignments[selectedCourse.id]}
+          onChange={handleAssignContainer}
+          containerOptions={containerOptions}
+          onClose={closeInspector}
+        />
+      )
+      : selectedContainer
+        ? (
+          <ContainerSidePanel
+            container={selectedContainer}
+            members={containerMembers.get(selectedContainer.id) ?? []}
+            theme={theme}
+            onChange={handleUpdateContainer}
             onClose={closeInspector}
           />
         )
-      : selectedContainer
-        ? (
-            <ContainerSidePanel
-              container={selectedContainer}
-              members={containerMembers.get(selectedContainer.id) ?? []}
-              theme={theme}
-              onChange={handleUpdateContainer}
-              onClose={closeInspector}
-            />
-          )
         : placeholderPanel;
 
   const workspaceClasses = "relative flex flex-1 min-h-[calc(100vh-8rem)] flex-col";
@@ -2247,44 +2158,44 @@ function GraphEditorPageInner() {
   const infoBubbleContent = hasSelection
     ? isMultiSelection
       ? (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-              Multiple selected
-            </p>
-            <h2 className="mt-3 text-xl font-semibold">
-              {selectionTotals.containerCount} {containerLabel} – {selectionTotals.courseCount} {courseLabel}
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Open the details surface to review this selection.
-            </p>
-          </div>
-        )
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+            Multiple selected
+          </p>
+          <h2 className="mt-3 text-xl font-semibold">
+            {selectionTotals.containerCount} {containerLabel} – {selectionTotals.courseCount} {courseLabel}
+          </h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Open the details surface to review this selection.
+          </p>
+        </div>
+      )
       : selectedCourse
         ? (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-                Course selected
-              </p>
-              <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
-              <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
-              <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-                <span>{selectedCourse.credits} credits</span>
-                <span>Status: {selectedCourse.status}</span>
-              </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+              Course selected
+            </p>
+            <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
+            <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+              <span>{selectedCourse.credits} credits</span>
+              <span>Status: {selectedCourse.status}</span>
             </div>
-          )
+          </div>
+        )
         : selectedContainer
           ? (
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-                  Container selected
-                </p>
-                <h2 className="mt-3 text-xl font-semibold">{selectedContainer.title}</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
-                </p>
-              </div>
-            )
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+                Container selected
+              </p>
+              <h2 className="mt-3 text-xl font-semibold">{selectedContainer.title}</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
+              </p>
+            </div>
+          )
           : defaultInfoBubble
     : defaultInfoBubble;
 
@@ -2538,6 +2449,8 @@ function GraphEditorPageInner() {
                 onSelectionChange={handleSelectionChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onNodeDrag={handleNodeDrag}
+                onNodeDragStart={handleNodeDragStart}
                 onNodeDragStop={handleNodeDragStop}
                 onNodeDoubleClick={handleNodeDoubleClick}
                 onConnect={handleConnect}
@@ -2603,9 +2516,8 @@ function GraphEditorPageInner() {
                         type="button"
                         onClick={item.action}
                         disabled={item.disabled}
-                        className={`${graphActionItemClasses} ${
-                          item.disabled ? "cursor-not-allowed opacity-50" : ""
-                        }`}
+                        className={`${graphActionItemClasses} ${item.disabled ? "cursor-not-allowed opacity-50" : ""
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -2998,13 +2910,13 @@ export function AddCourseDialog({ open, onClose, onSubmit, isSubmitting }: AddCo
 
   const handleChange =
     (field: keyof AddCourseFormState) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-      const value =
-        event.target.type === "checkbox"
-          ? (event.target as HTMLInputElement).checked
-          : event.target.value;
-      setFormState((prev) => ({ ...prev, [field]: value }));
-    };
+      (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const value =
+          event.target.type === "checkbox"
+            ? (event.target as HTMLInputElement).checked
+            : event.target.value;
+        setFormState((prev) => ({ ...prev, [field]: value }));
+      };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3188,9 +3100,9 @@ function CourseSidePanel({
 
   const handleChange =
     (field: keyof typeof formState) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-      setFormState((prev) => ({ ...prev, [field]: event.target.value }));
-    };
+      (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        setFormState((prev) => ({ ...prev, [field]: event.target.value }));
+      };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3457,11 +3369,10 @@ function ContainerSidePanel({
           <button
             type="button"
             onClick={() => handlePaletteSelect(null)}
-            className={`h-10 w-10 rounded-full border transition ${
-              paletteId === null
+            className={`h-10 w-10 rounded-full border transition ${paletteId === null
                 ? "border-brand ring-2 ring-brand/50"
                 : "border-slate-300 dark:border-slate-600"
-            }`}
+              }`}
             style={{
               background: DEFAULT_CONTAINER_FALLBACK[theme].fill,
             }}
@@ -3472,11 +3383,10 @@ function ContainerSidePanel({
               key={entry.id}
               type="button"
               onClick={() => handlePaletteSelect(entry.id)}
-              className={`h-10 w-10 rounded-full border transition ${
-                paletteId === entry.id
+              className={`h-10 w-10 rounded-full border transition ${paletteId === entry.id
                   ? "border-brand ring-2 ring-brand/50"
                   : "border-slate-300 dark:border-slate-600"
-              }`}
+                }`}
               style={{
                 background: theme === "dark" ? entry.dark.fill : entry.light.fill,
                 boxShadow:
