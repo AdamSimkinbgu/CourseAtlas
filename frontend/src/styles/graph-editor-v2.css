@@ -347,7 +347,7 @@
 }
 
 /* Container Node Visual */
-.react-flow__node-group { 
+.react-flow__node-container { 
 	background: transparent !important; 
 	border: none !important; 
 	box-shadow: none !important; 
@@ -356,7 +356,7 @@
 	z-index: 0 !important;
 }
 
-.react-flow__node-group.selected { 
+.react-flow__node-container.selected { 
 	box-shadow: none !important; 
 	border: none !important; 
 	outline: none !important; 
@@ -364,12 +364,12 @@
 	z-index: 0 !important;
 }
 
-.react-flow__node-group:focus { 
+.react-flow__node-container:focus { 
 	box-shadow: none !important; 
 	outline: none !important; 
 }
 
-.react-flow__node-group .react-flow__handle { 
+.react-flow__node-container .react-flow__handle { 
 	display:none; 
 }
 
@@ -377,7 +377,7 @@
 	z-index: 10 !important; 
 }
 
-.react-flow__node-group .container-node { 
+.react-flow__node-container .container-node { 
 	background: transparent; 
 	border: none; 
 	border-radius: var(--radius-md); 
@@ -385,7 +385,7 @@
 	min-width: 280px; 
 }
 
-.react-flow__node-group .container-node__header { 
+.react-flow__node-container .container-node__header { 
 	display:flex; 
 	align-items:center; 
 	justify-content: space-between; 
@@ -399,7 +399,13 @@
 	box-sizing: border-box; 
 }
 
-.react-flow__node-group .container-node__count { 
+.react-flow__node-container .container-node__title {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--fg-base);
+}
+
+.react-flow__node-container .container-node__count { 
 	font-size: 11px; 
 	color: var(--fg-dim); 
 	background: rgba(59,130,246,.2); 
@@ -408,65 +414,65 @@
 	padding: 2px 6px; 
 }
 
-.react-flow__node-group .container-node__body { 
+.react-flow__node-container .container-node__body { 
 	display: none; 
 }
 
-.react-flow__node-group.selected .container-node { 
+.react-flow__node-container.selected .container-node { 
 	outline: none; 
 }
 
-.react-flow__node-group.selected .container-node__header { 
+.react-flow__node-container.selected .container-node__header { 
 	outline: 2px solid var(--accent); 
 	outline-offset: 0; 
 }
 
 /* Container Tone Variants */
-.react-flow__node-group .container-node.tone-blue { 
+.react-flow__node-container .container-node.tone-blue { 
 	--container-border: rgba(59,130,246,.45); 
 }
 
-.react-flow__node-group .container-node.tone-blue .container-node__header { 
+.react-flow__node-container .container-node.tone-blue .container-node__header { 
 	background: linear-gradient(180deg, rgba(59,130,246,.15), transparent); 
 }
 
-.react-flow__node-group .container-node.tone-teal { 
+.react-flow__node-container .container-node.tone-teal { 
 	--container-border: rgba(20,184,166,.45); 
 }
 
-.react-flow__node-group .container-node.tone-teal .container-node__header { 
+.react-flow__node-container .container-node.tone-teal .container-node__header { 
 	background: linear-gradient(180deg, rgba(20,184,166,.15), transparent); 
 }
 
-.react-flow__node-group .container-node.tone-amber { 
+.react-flow__node-container .container-node.tone-amber { 
 	--container-border: rgba(245,158,11,.45); 
 }
 
-.react-flow__node-group .container-node.tone-amber .container-node__header { 
+.react-flow__node-container .container-node.tone-amber .container-node__header { 
 	background: linear-gradient(180deg, rgba(245,158,11,.15), transparent); 
 }
 
-.react-flow__node-group .container-node.tone-violet { 
+.react-flow__node-container .container-node.tone-violet { 
 	--container-border: rgba(139,92,246,.45); 
 }
 
-.react-flow__node-group .container-node.tone-violet .container-node__header { 
+.react-flow__node-container .container-node.tone-violet .container-node__header { 
 	background: linear-gradient(180deg, rgba(139,92,246,.15), transparent); 
 }
 
-.react-flow__node-group .container-node.tone-rose { 
+.react-flow__node-container .container-node.tone-rose { 
 	--container-border: rgba(244,63,94,.45); 
 }
 
-.react-flow__node-group .container-node.tone-rose .container-node__header { 
+.react-flow__node-container .container-node.tone-rose .container-node__header { 
 	background: linear-gradient(180deg, rgba(244,63,94,.15), transparent); 
 }
 
-.react-flow__node-group .container-node.tone-slate { 
+.react-flow__node-container .container-node.tone-slate { 
 	--container-border: rgba(100,116,139,.45); 
 }
 
-.react-flow__node-group .container-node.tone-slate .container-node__header { 
+.react-flow__node-container .container-node.tone-slate .container-node__header { 
 	background: linear-gradient(180deg, rgba(100,116,139,.15), transparent); 
 }
 

@@ -221,75 +221,7 @@ body.dark .course-node__subtext {
   border-color: rgba(245, 158, 11, 0.28);
 }
 
-.container-node {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  padding: 18px 18px 22px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.container-node--selected {
-  border-color: var(--container-border-color, rgba(59, 130, 246, 0.45));
-}
-
-.container-node__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 10px 14px;
-  border-radius: 18px;
-  border: 1px dashed var(--container-border-color, rgba(148, 163, 184, 0.45));
-  background: var(--container-header-bg, rgba(241, 245, 249, 0.6));
-  pointer-events: none;
-}
-
-.container-node__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: inherit;
-}
-
-.container-node__count {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--container-border-color, rgba(148, 163, 184, 0.45));
-  background: var(--container-count-bg, rgba(59, 130, 246, 0.22));
-  color: var(--container-count-color, #475569);
-}
-
-body.dark .container-node__count {
-  color: var(--container-count-color, rgba(226, 232, 240, 0.82));
-}
-
-.container-node__resizer-line {
-  border: 1px dashed rgba(148, 163, 184, 0.4) !important;
-}
-
-body.dark .container-node__resizer-line {
-  border-color: rgba(148, 163, 184, 0.22) !important;
-}
-
-.container-node__resizer-handle {
-  width: 14px !important;
-  height: 14px !important;
-  border-radius: 4px !important;
-  border: 1px solid rgba(148, 163, 184, 0.45) !important;
-  background: rgba(255, 255, 255, 0.9) !important;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16) !important;
-}
-
-body.dark .container-node__resizer-handle {
-  border-color: rgba(255, 255, 255, 0.28) !important;
-  background: rgba(15, 23, 42, 0.9) !important;
-  box-shadow: 0 8px 18px -4px rgba(0, 0, 0, 0.8) !important;
-}
+/* Container styles moved to graph-editor-v2.css */
 
 .react-flow__edge-path {
   transition: filter 0.18s ease, stroke 0.18s ease;

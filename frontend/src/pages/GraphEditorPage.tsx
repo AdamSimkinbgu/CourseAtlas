@@ -1147,8 +1147,27 @@ function GraphEditorPageInner() {
     lastDetailTimestampRef.current = dataTimestamp;
 
     const remoteAssignments = detail.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
-    setCourseAssignments(remoteAssignments);
-    assignmentsRef.current = remoteAssignments;
+    
+    // Build a set of valid container IDs to sanitize assignments
+    const validContainerIds = new Set(detail.graph.containers.map(c => c.id));
+    
+    // Sanitize assignments: remove any assignments to non-existent containers
+    const sanitizedAssignments: Record<string, string> = {};
+    for (const [courseId, containerId] of Object.entries(remoteAssignments)) {
+      if (validContainerIds.has(containerId)) {
+        sanitizedAssignments[courseId] = containerId;
+      } else {
+        console.warn(`Course ${courseId} is assigned to non-existent container ${containerId}, removing assignment`);
+      }
+    }
+    
+    setCourseAssignments(sanitizedAssignments);
+    assignmentsRef.current = sanitizedAssignments;
+    
+    // If we cleaned up any assignments, persist the sanitized version
+    if (Object.keys(remoteAssignments).length !== Object.keys(sanitizedAssignments).length) {
+      void persistAssignmentsSafe(sanitizedAssignments);
+    }
 
     const courseOrderIndex = new Map(
       detail.courses.map((course, index) => [course.id, index])
@@ -1164,7 +1183,7 @@ function GraphEditorPageInner() {
         });
 
         const assignedCourseIds = detail.courses
-          .filter((course) => remoteAssignments[course.id] === container.id)
+          .filter((course) => sanitizedAssignments[course.id] === container.id)
           .sort(
             (a, b) =>
               (courseOrderIndex.get(a.id) ?? 0) -
@@ -1236,7 +1255,8 @@ function GraphEditorPageInner() {
 
       const isSelected = selectedCourseIds.includes(course.id);
 
-      if (parent) {
+      // Validate that the parent container actually exists before treating this as a child node
+      if (parent && containerNodeMap.has(parent)) {
         const layoutState = containerLayouts.get(parent);
         const containerNode = containerNodeMap.get(parent);
         const layout = layoutState?.courseLayouts.get(course.id);
@@ -1261,6 +1281,7 @@ function GraphEditorPageInner() {
           },
           parentNode: parent,
           extent: "parent",
+          expandParent: true,
           style: { zIndex: 1 },
           draggable: true,
           selectable: true,
