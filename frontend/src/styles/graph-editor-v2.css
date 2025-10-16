@@ -378,25 +378,37 @@
 }
 
 .react-flow__node-container .container-node { 
-	background: transparent; 
-	border: none; 
-	border-radius: var(--radius-md); 
-	box-shadow: none; 
-	min-width: 280px; 
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(135deg, rgba(59,130,246,0.03) 0%, rgba(59,130,246,0.08) 100%); 
+	border: 2px dashed rgba(59,130,246,0.35);
+	border-radius: 12px; 
+	box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05), 0 4px 20px -4px rgba(0,0,0,0.2);
+	min-width: 280px;
+	position: relative;
+	backdrop-filter: blur(8px);
+	transition: all 0.2s ease;
+	display: flex;
+	flex-direction: column;
 }
 
 .react-flow__node-container .container-node__header { 
 	display:flex; 
 	align-items:center; 
-	justify-content: space-between; 
-	gap:8px; 
-	padding:10px 12px; 
-	border:1px dashed var(--container-border); 
-	border-radius: var(--radius-md); 
+	justify-content: space-between;
+	gap: 12px; 
+	padding: 12px 16px; 
 	font-weight: 600; 
+	font-size: 14px;
 	color: var(--fg-base); 
-	background: linear-gradient(180deg, rgba(255,255,255,.04), transparent); 
-	box-sizing: border-box; 
+	background: linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.08) 100%); 
+	backdrop-filter: blur(12px);
+	border-bottom: 2px dashed rgba(59,130,246,0.35);
+	border-top-left-radius: 10px;
+	border-top-right-radius: 10px;
+	box-sizing: border-box;
+	z-index: 1;
+	flex-shrink: 0;
 }
 
 .react-flow__node-container .container-node__title {
@@ -406,74 +418,185 @@
 }
 
 .react-flow__node-container .container-node__count { 
-	font-size: 11px; 
-	color: var(--fg-dim); 
-	background: rgba(59,130,246,.2); 
-	border:1px solid rgba(59,130,246,.35); 
+	font-size: 10px; 
+	font-weight: 700;
+	color: rgba(255,255,255,0.9);
+	background: rgba(59,130,246,.4); 
+	border: 1px solid rgba(59,130,246,.6); 
 	border-radius: 999px; 
-	padding: 2px 6px; 
+	padding: 3px 8px;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
 .react-flow__node-container .container-node__body { 
-	display: none; 
-}
-
-.react-flow__node-container.selected .container-node { 
-	outline: none; 
-}
-
-.react-flow__node-container.selected .container-node__header { 
-	outline: 2px solid var(--accent); 
-	outline-offset: 0; 
+	flex: 1;
+	padding: 16px;
+	min-height: 80px;
 }
 
 /* Container Tone Variants */
-.react-flow__node-container .container-node.tone-blue { 
-	--container-border: rgba(59,130,246,.45); 
+.react-flow__node-container .container-node.tone-indigo { 
+	background: linear-gradient(135deg, rgba(59,130,246,0.03) 0%, rgba(59,130,246,0.08) 100%);
+	border-color: rgba(59,130,246,0.35);
 }
 
-.react-flow__node-container .container-node.tone-blue .container-node__header { 
-	background: linear-gradient(180deg, rgba(59,130,246,.15), transparent); 
+.react-flow__node-container .container-node.tone-indigo .container-node__header { 
+	background: linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.08) 100%);
+	border-bottom-color: rgba(59,130,246,0.35);
+}
+
+.react-flow__node-container .container-node.tone-indigo .container-node__count {
+	background: rgba(59,130,246,.4);
+	border-color: rgba(59,130,246,.6);
+}
+
+.react-flow__node-container.selected .container-node.tone-indigo { 
+	outline: none;
+	border-color: rgba(59,130,246,0.7);
+	background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 0 3px rgba(59,130,246,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-indigo .container-node__header { 
+	border-bottom-color: rgba(59,130,246,0.6);
+	background: linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(59,130,246,0.15) 100%);
 }
 
 .react-flow__node-container .container-node.tone-teal { 
-	--container-border: rgba(20,184,166,.45); 
+	background: linear-gradient(135deg, rgba(20,184,166,0.03) 0%, rgba(20,184,166,0.08) 100%);
+	border-color: rgba(20,184,166,0.35);
 }
 
 .react-flow__node-container .container-node.tone-teal .container-node__header { 
-	background: linear-gradient(180deg, rgba(20,184,166,.15), transparent); 
+	background: linear-gradient(135deg, rgba(20,184,166,0.15) 0%, rgba(20,184,166,0.08) 100%);
+	border-bottom-color: rgba(20,184,166,0.35);
+}
+
+.react-flow__node-container .container-node.tone-teal .container-node__count {
+	background: rgba(20,184,166,.4);
+	border-color: rgba(20,184,166,.6);
+}
+
+.react-flow__node-container.selected .container-node.tone-teal { 
+	outline: none;
+	border-color: rgba(20,184,166,0.7);
+	background: linear-gradient(135deg, rgba(20,184,166,0.08) 0%, rgba(20,184,166,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(20,184,166,0.3), 0 0 0 3px rgba(20,184,166,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-teal .container-node__header { 
+	border-bottom-color: rgba(20,184,166,0.6);
+	background: linear-gradient(135deg, rgba(20,184,166,0.25) 0%, rgba(20,184,166,0.15) 100%);
 }
 
 .react-flow__node-container .container-node.tone-amber { 
-	--container-border: rgba(245,158,11,.45); 
+	background: linear-gradient(135deg, rgba(245,158,11,0.03) 0%, rgba(245,158,11,0.08) 100%);
+	border-color: rgba(245,158,11,0.35);
 }
 
 .react-flow__node-container .container-node.tone-amber .container-node__header { 
-	background: linear-gradient(180deg, rgba(245,158,11,.15), transparent); 
+	background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.08) 100%);
+	border-bottom-color: rgba(245,158,11,0.35);
 }
 
-.react-flow__node-container .container-node.tone-violet { 
-	--container-border: rgba(139,92,246,.45); 
+.react-flow__node-container .container-node.tone-amber .container-node__count {
+	background: rgba(245,158,11,.4);
+	border-color: rgba(245,158,11,.6);
 }
 
-.react-flow__node-container .container-node.tone-violet .container-node__header { 
-	background: linear-gradient(180deg, rgba(139,92,246,.15), transparent); 
+.react-flow__node-container.selected .container-node.tone-amber { 
+	outline: none;
+	border-color: rgba(245,158,11,0.7);
+	background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(245,158,11,0.3), 0 0 0 3px rgba(245,158,11,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-amber .container-node__header { 
+	border-bottom-color: rgba(245,158,11,0.6);
+	background: linear-gradient(135deg, rgba(245,158,11,0.25) 0%, rgba(245,158,11,0.15) 100%);
 }
 
 .react-flow__node-container .container-node.tone-rose { 
-	--container-border: rgba(244,63,94,.45); 
+	background: linear-gradient(135deg, rgba(244,63,94,0.03) 0%, rgba(244,63,94,0.08) 100%);
+	border-color: rgba(244,63,94,0.35);
 }
 
 .react-flow__node-container .container-node.tone-rose .container-node__header { 
-	background: linear-gradient(180deg, rgba(244,63,94,.15), transparent); 
+	background: linear-gradient(135deg, rgba(244,63,94,0.15) 0%, rgba(244,63,94,0.08) 100%);
+	border-bottom-color: rgba(244,63,94,0.35);
+}
+
+.react-flow__node-container .container-node.tone-rose .container-node__count {
+	background: rgba(244,63,94,.4);
+	border-color: rgba(244,63,94,.6);
+}
+
+.react-flow__node-container.selected .container-node.tone-rose { 
+	outline: none;
+	border-color: rgba(244,63,94,0.7);
+	background: linear-gradient(135deg, rgba(244,63,94,0.08) 0%, rgba(244,63,94,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(244,63,94,0.3), 0 0 0 3px rgba(244,63,94,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-rose .container-node__header { 
+	border-bottom-color: rgba(244,63,94,0.6);
+	background: linear-gradient(135deg, rgba(244,63,94,0.25) 0%, rgba(244,63,94,0.15) 100%);
+}
+
+.react-flow__node-container .container-node.tone-violet { 
+	background: linear-gradient(135deg, rgba(139,92,246,0.03) 0%, rgba(139,92,246,0.08) 100%);
+	border-color: rgba(139,92,246,0.35);
+}
+
+.react-flow__node-container .container-node.tone-violet .container-node__header { 
+	background: linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(139,92,246,0.08) 100%);
+	border-bottom-color: rgba(139,92,246,0.35);
+}
+
+.react-flow__node-container .container-node.tone-violet .container-node__count {
+	background: rgba(139,92,246,.4);
+	border-color: rgba(139,92,246,.6);
+}
+
+.react-flow__node-container.selected .container-node.tone-violet { 
+	outline: none;
+	border-color: rgba(139,92,246,0.7);
+	background: linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(139,92,246,0.3), 0 0 0 3px rgba(139,92,246,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-violet .container-node__header { 
+	border-bottom-color: rgba(139,92,246,0.6);
+	background: linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(139,92,246,0.15) 100%);
 }
 
 .react-flow__node-container .container-node.tone-slate { 
-	--container-border: rgba(100,116,139,.45); 
+	background: linear-gradient(135deg, rgba(100,116,139,0.03) 0%, rgba(100,116,139,0.08) 100%);
+	border-color: rgba(100,116,139,0.35);
 }
 
 .react-flow__node-container .container-node.tone-slate .container-node__header { 
-	background: linear-gradient(180deg, rgba(100,116,139,.15), transparent); 
+	background: linear-gradient(135deg, rgba(100,116,139,0.15) 0%, rgba(100,116,139,0.08) 100%);
+	border-bottom-color: rgba(100,116,139,0.35);
+}
+
+.react-flow__node-container .container-node.tone-slate .container-node__count {
+	background: rgba(100,116,139,.4);
+	border-color: rgba(100,116,139,.6);
+}
+
+.react-flow__node-container.selected .container-node.tone-slate { 
+	outline: none;
+	border-color: rgba(100,116,139,0.7);
+	background: linear-gradient(135deg, rgba(100,116,139,0.08) 0%, rgba(100,116,139,0.15) 100%);
+	box-shadow: inset 0 0 0 1px rgba(100,116,139,0.3), 0 0 0 3px rgba(100,116,139,0.2), 0 4px 20px -4px rgba(0,0,0,0.3);
+}
+
+.react-flow__node-container.selected .container-node.tone-slate .container-node__header { 
+	border-bottom-color: rgba(100,116,139,0.6);
+	background: linear-gradient(135deg, rgba(100,116,139,0.25) 0%, rgba(100,116,139,0.15) 100%);
 }
 
 /* Edge styling */

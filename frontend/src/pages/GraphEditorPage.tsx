@@ -602,8 +602,8 @@ type ContainerNodeProps = NodeProps<ContainerNodeData>;
 function ContainerNode({ data, selected }: ContainerNodeProps) {
   const { container, onSelect, courseCount } = data;
   
-  // Determine tone based on container properties or default
-  const tone = container.color || "blue"; // You can map container.color to tone variants
+  // Use palette_id to determine the tone/color variant
+  const tone = container.palette_id || "indigo"; // Default to indigo if no palette selected
   const toneClassName = `container-node tone-${tone}${selected ? " is-selected" : ""}`;
 
   return (
@@ -619,8 +619,11 @@ function ContainerNode({ data, selected }: ContainerNodeProps) {
           {container.title}
         </span>
         <span className="container-node__count" aria-label={`${courseCount} courses`}>
-          {courseCount === 1 ? "1 course" : `${courseCount} courses`}
+          {courseCount === 1 ? "1 COURSE" : `${courseCount} COURSES`}
         </span>
+      </div>
+      <div className="container-node__body">
+        {/* Course nodes are rendered as children by React Flow */}
       </div>
       <Handle
         type="source"
@@ -3387,18 +3390,6 @@ function ContainerSidePanel({
       <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
         <span>Colour</span>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => handlePaletteSelect(null)}
-            className={`h-10 w-10 rounded-full border transition ${paletteId === null
-                ? "border-brand ring-2 ring-brand/50"
-                : "border-slate-300 dark:border-slate-600"
-              }`}
-            style={{
-              background: DEFAULT_CONTAINER_FALLBACK[theme].fill,
-            }}
-            title="Neutral"
-          />
           {CONTAINER_PALETTE.map((entry) => (
             <button
               key={entry.id}
