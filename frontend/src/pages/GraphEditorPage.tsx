@@ -533,6 +533,23 @@ function GraphEditorPageInner() {
     );
   }, []);
 
+  // Helper function to update nodes and sync nodesMapRef (#3)
+  const updateNodesWithMap = useCallback(
+    (updater: (prev: Node<EditorNodeData>[]) => Node<EditorNodeData>[]) => {
+      setNodes((prev) => {
+        const next = updater(prev);
+
+        // Always sync map with O(1) lookups
+        const nextMap = new Map<string, Node<EditorNodeData>>();
+        next.forEach((node) => nextMap.set(node.id, node));
+        nodesMapRef.current = nextMap;
+
+        return next;
+      });
+    },
+    [setNodes]
+  );
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -1222,7 +1239,7 @@ function GraphEditorPageInner() {
         const snapped = snapPoint(node.position);
 
         // Update container position and calculate new absolute positions for children
-        setNodes((prev) => {
+        updateNodesWithMap((prev) => {
           const adjusted = [...prev];
           const containerIndex = adjusted.findIndex(
             (candidate) => candidate.id === node.id && candidate.type === "container"
@@ -1294,7 +1311,7 @@ function GraphEditorPageInner() {
           // Top-level nodes: snap to grid
           absolutePosition = snapPoint(node.position);
           // Update position to snapped value for top-level nodes
-          setNodes((prev) =>
+          updateNodesWithMap((prev) =>
             prev.map((candidate) =>
               candidate.id === node.id && candidate.type === "course"
                 ? ({
@@ -1313,7 +1330,7 @@ function GraphEditorPageInner() {
         pushHistory();
       }
     },
-    [pushHistory, scheduleContainerPersistence, scheduleCoursePositionUpdates, setNodes]
+    [pushHistory, scheduleContainerPersistence, scheduleCoursePositionUpdates, updateNodesWithMap]
   );
 
   const handleNodeClick = useCallback(
@@ -1431,7 +1448,7 @@ function GraphEditorPageInner() {
 
         void persistAssignmentsSafe(nextAssignments);
 
-        setNodes((prevNodes) =>
+        updateNodesWithMap((prevNodes) =>
           reflowAfterAssignment(prevNodes, courseId, previousParent, nextParent)
         );
 
@@ -1448,7 +1465,7 @@ function GraphEditorPageInner() {
       pushHistory,
       reflowAfterAssignment,
       scheduleContainerPersistence,
-      setNodes,
+      updateNodesWithMap,
     ]
   );
 
@@ -1474,7 +1491,7 @@ function GraphEditorPageInner() {
       height: 300,
       position: basePosition,
     };
-    setNodes((nds) => [
+    updateNodesWithMap((nds) => [
       ...nds,
       {
         id: newId,
@@ -1501,11 +1518,17 @@ function GraphEditorPageInner() {
       pushHistory();
       scheduleContainerPersistence();
     }, 0);
-  }, [openInspectorForContainer, pushHistory, scheduleContainerPersistence, setNodes, theme]);
+  }, [
+    openInspectorForContainer,
+    pushHistory,
+    scheduleContainerPersistence,
+    updateNodesWithMap,
+    theme,
+  ]);
 
   const handleUpdateContainer = useCallback(
     (containerId: string, updates: Partial<ContainerShape>) => {
-      setNodes((nds) =>
+      updateNodesWithMap((nds) =>
         nds.map((node) => {
           if (node.id !== containerId || node.type !== "container") {
             return node;
@@ -1533,7 +1556,7 @@ function GraphEditorPageInner() {
         scheduleContainerPersistence();
       }, 0);
     },
-    [pushHistory, scheduleContainerPersistence, setNodes]
+    [pushHistory, scheduleContainerPersistence, updateNodesWithMap]
   );
 
   const handleDeleteSelection = useCallback(async () => {
@@ -1559,7 +1582,7 @@ function GraphEditorPageInner() {
           void persistAssignmentsSafe(next);
           return next;
         });
-        setNodes((nds) => nds.filter((candidate) => candidate.id !== containerId));
+        updateNodesWithMap((nds) => nds.filter((candidate) => candidate.id !== containerId));
         removedContainer = true;
       }
     }
@@ -1588,7 +1611,7 @@ function GraphEditorPageInner() {
     scheduleContainerPersistence,
     selectedEdgeIds,
     setEdges,
-    setNodes,
+    updateNodesWithMap,
   ]);
 
   const handleExportGraph = useCallback(async () => {
