@@ -718,8 +718,10 @@ function GraphEditorPageInner() {
   const [isLargeViewport, setIsLargeViewport] = useState(initialViewportIsLarge);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGraphActionsOpen, setIsGraphActionsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showGridDebug, setShowGridDebug] = useState(false);
   const [showMiniMap, setShowMiniMap] = useState(true);
+  const [gridStyle, setGridStyle] = useState<"dots" | "lines">("dots");
   const {
     courses: selectedCourseIds,
     containers: selectedContainerIds,
@@ -2486,6 +2488,7 @@ function GraphEditorPageInner() {
                 minZoom={canvasMinZoom}
                 showGridDebug={showGridDebug}
                 showMiniMap={showMiniMap}
+                gridStyle={gridStyle}
               />
             </ReactFlowProvider>
 
@@ -2523,27 +2526,86 @@ function GraphEditorPageInner() {
                 </div>
               </div>
 
-              <div className="pointer-events-auto absolute right-6 top-6 z-20 flex flex-col items-end gap-3">
-                <button
-                  type="button"
-                  aria-expanded={isGraphActionsOpen}
-                  onClick={() => setIsGraphActionsOpen((prev) => !prev)}
-                  className={graphActionsButtonClasses}
-                >
-                  Graph actions
-                </button>
-                {isGraphActionsOpen ? (
-                  <div className={`${graphActionPanelClasses} self-end`}>
-                    {graphActionItems.map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        onClick={item.action}
-                        disabled={item.disabled}
-                        className={`${graphActionItemClasses} ${item.disabled ? "cursor-not-allowed opacity-50" : ""
-                          }`}
-                      >
-                        {item.label}
+              <div className="pointer-events-auto absolute right-6 top-6 z-20 flex flex-row items-start gap-3">
+                <div className="relative flex flex-col items-end">
+                  <button
+                    type="button"
+                    aria-expanded={isSettingsOpen}
+                    onClick={() => {
+                      setIsSettingsOpen((prev) => !prev);
+                      setIsGraphActionsOpen(false);
+                    }}
+                    className={graphActionsButtonClasses}
+                  >
+                    ⚙️ Settings
+                  </button>
+                  {isSettingsOpen ? (
+                    <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-medium">Grid Style</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setGridStyle("dots")}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                                gridStyle === "dots"
+                                  ? theme === "dark"
+                                    ? "bg-blue-500/30 text-blue-200 border border-blue-400/50"
+                                    : "bg-blue-100 text-blue-700 border border-blue-300"
+                                  : theme === "dark"
+                                    ? "bg-slate-800/50 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50"
+                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                              }`}
+                            >
+                              Dots
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setGridStyle("lines")}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                                gridStyle === "lines"
+                                  ? theme === "dark"
+                                    ? "bg-blue-500/30 text-blue-200 border border-blue-400/50"
+                                    : "bg-blue-100 text-blue-700 border border-blue-300"
+                                  : theme === "dark"
+                                    ? "bg-slate-800/50 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50"
+                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                              }`}
+                            >
+                              Lines
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="relative flex flex-col items-end">
+                  <button
+                    type="button"
+                    aria-expanded={isGraphActionsOpen}
+                    onClick={() => {
+                      setIsGraphActionsOpen((prev) => !prev);
+                      setIsSettingsOpen(false);
+                    }}
+                    className={graphActionsButtonClasses}
+                  >
+                    Graph actions
+                  </button>
+                  {isGraphActionsOpen ? (
+                    <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
+                      {graphActionItems.map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={item.action}
+                          disabled={item.disabled}
+                          className={`${graphActionItemClasses} ${item.disabled ? "cursor-not-allowed opacity-50" : ""
+                            }`}
+                        >
+                          {item.label}
                       </button>
                     ))}
                   </div>
@@ -2629,6 +2691,7 @@ type GraphEditorCanvasProps = {
   theme: ThemeMode;
   showGridDebug: boolean;
   showMiniMap: boolean;
+  gridStyle: "dots" | "lines";
 };
 
 function GraphEditorCanvas({
@@ -2650,42 +2713,47 @@ function GraphEditorCanvas({
   theme,
   showGridDebug,
   showMiniMap,
+  gridStyle,
 }: GraphEditorCanvasProps) {
   const themeTokens = THEME_TOKENS[theme];
-  const flowBackground = theme === "dark" ? "bg-slate-950/90" : "bg-slate-100";
+  const flowBackground = "";
   const canvasStyle = useMemo(
     () => ({
-      backgroundColor: themeTokens.surface.canvas,
+      backgroundColor: theme === "dark" ? "#11151c" : "#f5f7fa",
     }),
-    [themeTokens.surface.canvas]
+    [theme]
   );
   const miniMapStyle = useMemo(
     () => ({
       height: 168,
       width: 220,
-      background: themeTokens.minimap.background,
-      borderRadius: 12,
-      boxShadow: themeTokens.shadows.sm,
+      background: theme === "dark" ? "#1b2230" : "#ffffff",
+      borderRadius: 6,
+      boxShadow: theme === "dark" 
+        ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
+        : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
       border:
         theme === "dark"
-          ? "1px solid rgba(15,23,42,0.55)"
-          : "1px solid rgba(148,163,184,0.25)",
+          ? "1px solid rgba(255,255,255,0.06)"
+          : "1px solid rgba(0,0,0,0.08)",
       bottom: 16,
       left: 16,
     }),
-    [themeTokens.minimap.background, themeTokens.shadows.sm, theme]
+    [theme]
   );
   const controlsStyle = useMemo(
     () => ({
-      background: themeTokens.surface.panel,
+      background: theme === "dark" ? "#1b2230" : "#ffffff",
       borderRadius: 12,
-      boxShadow: themeTokens.shadows.sm,
+      boxShadow: theme === "dark"
+        ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
+        : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
       border:
         theme === "dark"
-          ? "1px solid rgba(15,23,42,0.55)"
-          : "1px solid rgba(148,163,184,0.25)",
+          ? "1px solid rgba(255,255,255,0.06)"
+          : "1px solid rgba(0,0,0,0.08)",
     }),
-    [themeTokens.surface.panel, themeTokens.shadows.sm, theme]
+    [theme]
   );
   const miniMapNodeColor = useCallback(
     (node: Node<EditorNodeData>) => {
@@ -2886,10 +2954,10 @@ function GraphEditorCanvas({
           style={controlsStyle}
         />
         <Background
-          variant={BackgroundVariant.Dots}
-          gap={GRID_CONFIG.UNIT}
-          size={1}
-          color={themeTokens.canvas.grid}
+          variant={gridStyle === "dots" ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+          gap={gridStyle === "dots" ? 20 : 24}
+          size={gridStyle === "dots" ? 1 : undefined}
+          color={theme === "dark" ? "#2a3344" : "#dce2ea"}
         />
       </ReactFlow>
     </div>

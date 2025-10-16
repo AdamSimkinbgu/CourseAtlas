@@ -11,24 +11,36 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  --bg-surface: #f8fafc;
+  /* Light theme - from Course Mermaid Sequence Maker */
+  --bg-app: #f5f7fa;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f2f4f8;
   --bg-surface-elevated: #ffffff;
-  --bg-grid-dot: rgba(148, 163, 184, 0.35);
-  --shadow-sm: 0 16px 35px -24px rgba(15, 23, 42, 0.25);
-  --shadow-md: 0 32px 65px -30px rgba(15, 23, 42, 0.35);
+  --bg-grid-dot: #dce2ea;
+  --fg-base: #1e293b;
+  --fg-dim: #5c6777;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.05) inset;
+  --shadow-md: 0 4px 10px -2px rgba(0, 0, 0, 0.15);
 }
 
 body {
   @apply bg-slate-100 text-slate-900 antialiased;
+  background: var(--bg-app);
+  color: var(--fg-base);
 }
 
 body.dark {
   @apply bg-slate-950 text-slate-100;
-  --bg-surface: rgba(15, 23, 42, 0.9);
+  /* Dark theme - from Course Mermaid Sequence Maker */
+  --bg-app: #11151c;
+  --bg-surface: #1b2230;
+  --bg-surface-alt: #232c3d;
   --bg-surface-elevated: rgba(26, 32, 44, 0.92);
-  --bg-grid-dot: rgba(71, 85, 105, 0.45);
-  --shadow-sm: 0 24px 50px -28px rgba(0, 0, 0, 0.65);
-  --shadow-md: 0 44px 80px -36px rgba(0, 0, 0, 0.75);
+  --bg-grid-dot: #2a3344;
+  --fg-base: #e5ecf5;
+  --fg-dim: #94a3b8;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
 }
 
 a {
@@ -223,10 +235,55 @@ body.dark .course-node__subtext {
 
 /* Container styles moved to graph-editor-v2.css */
 
+/* React Flow Canvas Enhancements - from Course Mermaid Sequence Maker */
+.react-flow__pane {
+  cursor: default;
+}
+
 .react-flow__edge-path {
+  stroke: #74809a;
+  stroke-width: 2;
+  opacity: 0.95;
   transition: filter 0.18s ease, stroke 0.18s ease;
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
-  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.35));
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.35));
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent, #3b82f6);
+}
+
+/* Background grid styling */
+.react-flow__background {
+  background-color: transparent;
+}
+
+/* Controls styling matching Course Mermaid Sequence Maker */
+.react-flow__controls {
+  box-shadow: var(--shadow-sm);
+}
+
+.react-flow__controls-button {
+  background: var(--bg-surface);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--fg-base);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--bg-surface-alt);
+  border-color: var(--accent, #3b82f6);
+}
+
+body.dark .react-flow__controls-button {
+  background: var(--bg-surface-alt);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark .react-flow__controls-button:hover {
+  background: var(--accent-muted, #1d4ed8);
+  border-color: var(--accent, #3b82f6);
+  color: #fff;
 }
