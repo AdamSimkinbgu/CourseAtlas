@@ -503,6 +503,9 @@ function GraphEditorPageInner() {
   const edgesRef = useRef<Edge[]>([]);
   const assignmentsRef = useRef<Record<string, string>>(courseAssignments);
   const containerPersistTimeoutRef = useRef<number | null>(null);
+  const coursePositionUpdateTimeoutRef = useRef<number | null>(null);
+  const pendingCourseUpdatesRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const nodesMapRef = useRef<Map<string, Node<EditorNodeData>>>(new Map());
   const graphMutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const updateGraphCache = useCallback(
@@ -582,20 +585,24 @@ function GraphEditorPageInner() {
           : undefined;
 
       const previousContainerNode = findContainerNode(previousParent);
+      const nextContainerNode = findContainerNode(nextParent);
+
+      // Calculate current absolute position (without snapping to avoid jumps)
       const absoluteBefore =
         previousParent && previousContainerNode
-          ? snapPoint({
+          ? {
               x: previousContainerNode.position.x + originalCourseNode.position.x,
               y: previousContainerNode.position.y + originalCourseNode.position.y,
-            })
-          : snapPoint({
+            }
+          : {
               x: originalCourseNode.position.x,
               y: originalCourseNode.position.y,
-            });
+            };
 
       let courseNode: Node<CourseNodeData> = { ...originalCourseNode };
 
       if (!nextParent) {
+        // Moving OUT of container - snap to grid and use absolute position
         const parkedPosition = previousContainerNode
           ? parkCourseOutsideContainer(previousContainerNode, absoluteBefore)
           : snapPoint(absoluteBefore);
@@ -615,9 +622,21 @@ function GraphEditorPageInner() {
           },
         } satisfies Node<CourseNodeData>;
       } else {
+        // Moving INTO or BETWEEN containers - calculate relative position
+        const relativePosition = nextContainerNode
+          ? {
+              x: absoluteBefore.x - nextContainerNode.position.x,
+              y: absoluteBefore.y - nextContainerNode.position.y,
+            }
+          : absoluteBefore;
+
         courseNode = {
           ...courseNode,
           parentNode: nextParent,
+          position: relativePosition,
+          positionAbsolute: absoluteBefore,
+          // Note: Position in data.course is NOT updated here - it will be updated on next drag
+          // This prevents inconsistency between node position and data position
           // Removed: extent: "parent" - allows free positioning even within containers
         } satisfies Node<CourseNodeData>;
       }
@@ -628,14 +647,6 @@ function GraphEditorPageInner() {
     },
     [courseDetailMap]
   );
-
-  useEffect(() => {
-    return () => {
-      if (containerPersistTimeoutRef.current !== null) {
-        window.clearTimeout(containerPersistTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const openInspectorForCourse = useCallback(
     (courseId: string) => {
@@ -655,6 +666,47 @@ function GraphEditorPageInner() {
     setIsMenuOpen(false);
     clearSelection();
   }, [clearSelection]);
+
+  // Debounced batch update for course positions - prevents overwhelming backend
+  const scheduleCoursePositionUpdates = useCallback(() => {
+    if (coursePositionUpdateTimeoutRef.current !== null) {
+      window.clearTimeout(coursePositionUpdateTimeoutRef.current);
+    }
+    coursePositionUpdateTimeoutRef.current = window.setTimeout(() => {
+      const updates = Array.from(pendingCourseUpdatesRef.current.entries());
+      pendingCourseUpdatesRef.current.clear();
+
+      // Send all pending updates in parallel with error handling and rollback
+      updates.forEach(([courseId, position]) => {
+        void updateCourseMutation
+          .mutateAsync({
+            courseId,
+            data: { position },
+          })
+          .catch((error) => {
+            console.error(`Failed to update course ${courseId} position`, error);
+            // TODO: Show user-facing error notification
+            // Rollback: The cache wasn't updated optimistically, so no rollback needed
+            // But we should refetch to ensure consistency
+            void detailQuery.refetch();
+          });
+      });
+
+      coursePositionUpdateTimeoutRef.current = null;
+    }, 500); // 500ms debounce - balances responsiveness with backend load
+  }, [detailQuery, updateCourseMutation]);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup: flush pending updates on unmount
+      if (coursePositionUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(coursePositionUpdateTimeoutRef.current);
+      }
+      if (containerPersistTimeoutRef.current !== null) {
+        window.clearTimeout(containerPersistTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -722,8 +774,22 @@ function GraphEditorPageInner() {
   const flushContainerPersistence = useCallback(async () => {
     if (!graphId) return;
     const serialized = serializeContainersFromNodes();
+
+    // CRITICAL FIX: When updating container positions in cache, also update child course positions
+    // This prevents the rebuild effect from using stale child positions with new container positions
     const rollback = updateGraphCache((draft) => {
       draft.graph.containers = serialized.map((container) => ({ ...container }));
+
+      // Update child course positions based on pending updates
+      if (pendingCourseUpdatesRef.current.size > 0) {
+        pendingCourseUpdatesRef.current.forEach((position, courseId) => {
+          const courseIndex = draft.courses.findIndex((c) => c.id === courseId);
+          if (courseIndex !== -1) {
+            draft.courses[courseIndex].position_x = position.x;
+            draft.courses[courseIndex].position_y = position.y;
+          }
+        });
+      }
     });
     await enqueueGraphMutation(async () => {
       try {
@@ -752,30 +818,6 @@ function GraphEditorPageInner() {
       });
     }, 300);
   }, [flushContainerPersistence]);
-
-  const enqueueCoursePositionUpdate = useCallback(
-    (courseId: string, position: { x: number; y: number }) => {
-      const rollback = updateGraphCache((draft) => {
-        const target = draft.courses.find((course) => course.id === courseId);
-        if (target) {
-          target.position_x = position.x;
-          target.position_y = position.y;
-        }
-      });
-      return enqueueGraphMutation(async () => {
-        try {
-          await updateCourseMutation.mutateAsync({
-            courseId,
-            data: { position },
-          });
-        } catch (error) {
-          rollback();
-          throw error;
-        }
-      });
-    },
-    [enqueueGraphMutation, updateCourseMutation, updateGraphCache]
-  );
 
   const persistAssignments = useMemo(
     () =>
@@ -860,11 +902,17 @@ function GraphEditorPageInner() {
       return;
     }
 
+    // Check if data has actually changed to avoid unnecessary rebuilds
     const dataTimestamp = detailQuery.dataUpdatedAt ?? Date.now();
     if (lastDetailTimestampRef.current === dataTimestamp && nodesRef.current.length > 0) {
       return;
     }
     lastDetailTimestampRef.current = dataTimestamp;
+
+    // OPTIMIZATION NOTE: This rebuilds ALL nodes whenever data changes
+    // Position updates are now handled separately and don't trigger cache updates,
+    // but other mutations (title, status, etc.) will still cause full rebuilds
+    // Future improvement: Use React Flow's updateNode() for incremental updates
 
     const remoteAssignments = detail.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
 
@@ -958,10 +1006,14 @@ function GraphEditorPageInner() {
       // If they have a parent, we still track it, but don't restrict positioning
       if (parent && containerNodeMap.has(parent)) {
         const containerNode = containerNodeMap.get(parent)!;
-        const absolutePosition = snapPoint({
+        // For courses inside containers, use exact stored positions - NO SNAPPING
+        // The stored position is absolute, convert to relative for React Flow
+        const absolutePosition = {
           x: Number.isFinite(course.position_x) ? course.position_x : containerNode.position.x + 50,
-          y: Number.isFinite(course.position_y) ? course.position_y : containerNode.position.y + 100,
-        });
+          y: Number.isFinite(course.position_y)
+            ? course.position_y
+            : containerNode.position.y + 100,
+        };
         const relativePosition = {
           x: absolutePosition.x - containerNode.position.x,
           y: absolutePosition.y - containerNode.position.y,
@@ -1036,6 +1088,12 @@ function GraphEditorPageInner() {
     const nextNodes = [...containerNodes, ...courseNodes];
     setNodes(nextNodes);
     setEdges(edgesList);
+
+    // Update nodesMapRef for O(1) lookups
+    const nextNodesMap = new Map<string, Node<EditorNodeData>>();
+    nextNodes.forEach((node) => nextNodesMap.set(node.id, node));
+    nodesMapRef.current = nextNodesMap;
+
     historyRef.current = [];
     futureRef.current = [];
     pushHistory();
@@ -1050,6 +1108,7 @@ function GraphEditorPageInner() {
     setEdges,
     setNodes,
     theme,
+    persistAssignmentsSafe,
   ]);
 
   const handleNodesChange = useCallback(
@@ -1108,6 +1167,12 @@ function GraphEditorPageInner() {
         setCourseAssignments(previous.assignments);
         setNodes(previous.nodes);
         setEdges(previous.edges);
+
+        // Sync nodesMapRef
+        const nextNodesMap = new Map<string, Node<EditorNodeData>>();
+        previous.nodes.forEach((node) => nextNodesMap.set(node.id, node));
+        nodesMapRef.current = nextNodesMap;
+
         setTimeout(() => {
           void persistAssignmentsSafe(previous.assignments);
           scheduleContainerPersistence();
@@ -1128,6 +1193,12 @@ function GraphEditorPageInner() {
         setCourseAssignments(next.assignments);
         setNodes(next.nodes);
         setEdges(next.edges);
+
+        // Sync nodesMapRef
+        const nextNodesMap = new Map<string, Node<EditorNodeData>>();
+        next.nodes.forEach((node) => nextNodesMap.set(node.id, node));
+        nodesMapRef.current = nextNodesMap;
+
         setTimeout(() => {
           void persistAssignmentsSafe(next.assignments);
           scheduleContainerPersistence();
@@ -1137,7 +1208,7 @@ function GraphEditorPageInner() {
     [persistAssignmentsSafe, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
   );
 
-  const handleNodeDrag = useCallback((_event: unknown, _node: Node<EditorNodeData>) => {
+  const handleNodeDrag = useCallback(() => {
     // No collision detection - allow free dragging
   }, []);
 
@@ -1149,57 +1220,100 @@ function GraphEditorPageInner() {
     (_: unknown, node: Node<EditorNodeData>) => {
       if (node.type === "container") {
         const snapped = snapPoint(node.position);
+
+        // Update container position and calculate new absolute positions for children
         setNodes((prev) => {
           const adjusted = [...prev];
           const containerIndex = adjusted.findIndex(
             (candidate) => candidate.id === node.id && candidate.type === "container"
           );
+
           if (containerIndex !== -1) {
             const existing = adjusted[containerIndex] as Node<ContainerNodeData>;
             adjusted[containerIndex] = {
               ...existing,
               position: snapped,
-              data: {
-                ...existing.data,
-                container: {
-                  ...existing.data.container,
-                  position: snapped,
-                },
-              },
+              // Note: container.position is redundant with node.position, not updating data
             } satisfies Node<ContainerNodeData>;
+
+            // CRITICAL FIX: Get child positions from CURRENT React Flow state (prev), not stale nodesRef
+            // When container is dragged, React Flow updates both container AND children positions
+            // We must read the updated child positions from the current state during this render
+            // NOTE: React Flow sets parentId automatically when parentNode is specified
+            const childCourses = prev.filter(
+              (n) => n.type === "course" && (n.parentId === node.id || n.parentNode === node.id)
+            ) as Node<CourseNodeData>[];
+
+            if (childCourses.length > 0) {
+              childCourses.forEach((childNode) => {
+                // Child positions in React Flow are relative to parent
+                // Calculate new absolute position using the current relative position + new container position
+                const newAbsolutePosition = {
+                  x: childNode.position.x + snapped.x,
+                  y: childNode.position.y + snapped.y,
+                };
+                // Queue update for batch processing - won't trigger cache update
+                pendingCourseUpdatesRef.current.set(childNode.id, newAbsolutePosition);
+              });
+              scheduleCoursePositionUpdates();
+            }
           }
+
           return adjusted;
         });
+
         scheduleContainerPersistence();
         pushHistory();
         return;
       }
 
       if (node.type === "course") {
-        const snapped = snapPoint(node.position);
-        setNodes((prev) =>
-          prev.map((candidate) =>
-            candidate.id === node.id && candidate.type === "course"
-              ? ({
-                  ...candidate,
-                  position: snapped,
-                  data: {
-                    ...candidate.data,
-                    course: {
-                      ...(candidate.data as CourseNodeData).course,
-                      position_x: snapped.x,
-                      position_y: snapped.y,
-                    },
-                  },
-                } as Node<CourseNodeData>)
-              : candidate
-          )
-        );
-        void enqueueCoursePositionUpdate(node.id, snapped);
+        // For nodes inside containers, positions in React Flow are relative to parent
+        // But we save ABSOLUTE positions to the database for consistency
+        const isInContainer = Boolean(node.parentId || node.parentNode);
+
+        let absolutePosition: { x: number; y: number };
+        if (isInContainer) {
+          // CRITICAL FIX: Use current nodes state, not nodesRef which might be stale
+          // OPTIMIZATION: Use Map for O(1) lookup instead of O(n) array search
+          const parentNodeId = node.parentId || node.parentNode;
+          const parentNode = nodesMapRef.current.get(parentNodeId || "");
+          if (parentNode) {
+            absolutePosition = {
+              x: node.position.x + parentNode.position.x,
+              y: node.position.y + parentNode.position.y,
+            };
+          } else {
+            // Fallback if parent not found - log warning and treat as top-level
+            console.warn(
+              `Parent container ${parentNodeId} not found for course ${node.id}, treating as top-level node`
+            );
+            absolutePosition = snapPoint(node.position);
+          }
+        } else {
+          // Top-level nodes: snap to grid
+          absolutePosition = snapPoint(node.position);
+          // Update position to snapped value for top-level nodes
+          setNodes((prev) =>
+            prev.map((candidate) =>
+              candidate.id === node.id && candidate.type === "course"
+                ? ({
+                    ...candidate,
+                    position: absolutePosition,
+                  } as Node<CourseNodeData>)
+                : candidate
+            )
+          );
+        }
+
+        // Queue position update for batch processing - reduces backend load
+        pendingCourseUpdatesRef.current.set(node.id, absolutePosition);
+        scheduleCoursePositionUpdates();
+
         pushHistory();
       }
     },
-    [enqueueCoursePositionUpdate, pushHistory, scheduleContainerPersistence, setNodes]
+    [pushHistory, scheduleContainerPersistence, scheduleCoursePositionUpdates, setNodes]
   );
 
   const handleNodeClick = useCallback(
@@ -1329,7 +1443,13 @@ function GraphEditorPageInner() {
         return nextAssignments;
       });
     },
-    [persistAssignmentsSafe, pushHistory, reflowAfterAssignment, scheduleContainerPersistence]
+    [
+      persistAssignmentsSafe,
+      pushHistory,
+      reflowAfterAssignment,
+      scheduleContainerPersistence,
+      setNodes,
+    ]
   );
 
   const handleAddContainer = useCallback(() => {
@@ -1337,13 +1457,13 @@ function GraphEditorPageInner() {
     const existingContainers = nodesRef.current.filter((node) => node.type === "container");
     const nextIndex = existingContainers.length + 1;
     const palette = CONTAINER_PALETTE[Math.floor(Math.random() * CONTAINER_PALETTE.length)];
-    
+
     // Simplified: just offset new containers by a fixed amount
     const basePosition = snapPoint({
       x: existingContainers.length * 500,
       y: existingContainers.length * 400,
     });
-    
+
     // Use default container size
     const container: ContainerShape = {
       id: newId,
@@ -1413,7 +1533,7 @@ function GraphEditorPageInner() {
         scheduleContainerPersistence();
       }, 0);
     },
-    [pushHistory, scheduleContainerPersistence, setNodes, theme]
+    [pushHistory, scheduleContainerPersistence, setNodes]
   );
 
   const handleDeleteSelection = useCallback(async () => {
@@ -1463,7 +1583,7 @@ function GraphEditorPageInner() {
     deleteCourseMutation,
     detailQuery,
     handleEdgesDelete,
-    persistAssignments,
+    persistAssignmentsSafe,
     pushHistory,
     scheduleContainerPersistence,
     selectedEdgeIds,
@@ -1638,9 +1758,11 @@ function GraphEditorPageInner() {
   const selectionCount = selectionTotals.courseCount + selectionTotals.containerCount;
   const isMultiSelection = selectionCount > 1;
   const hasSelection = selectionCount > 0;
-  const allCourses = detailQuery.data?.courses ?? [];
+
   const multiSelectionData = useMemo(() => {
     if (!isMultiSelection) return null;
+
+    const allCourses = detailQuery.data?.courses ?? [];
     const containerMap = new Map<string, ContainerShape>();
     nodes.forEach((node) => {
       if (node.type === "container") {
@@ -1655,8 +1777,8 @@ function GraphEditorPageInner() {
       containers: containerMap,
     });
   }, [
-    allCourses,
     courseAssignments,
+    detailQuery.data?.courses,
     isMultiSelection,
     nodes,
     selectedContainerIds,
@@ -2325,7 +2447,10 @@ function GraphEditorPageInner() {
                           {gridStyle === "dots" && (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium flex items-center gap-2">
+                                <label
+                                  htmlFor="grid-dot-size"
+                                  className="text-sm font-medium flex items-center gap-2"
+                                >
                                   <span>⚫</span>
                                   <span>Dot Size</span>
                                 </label>
@@ -2340,6 +2465,7 @@ function GraphEditorPageInner() {
                                 </span>
                               </div>
                               <input
+                                id="grid-dot-size"
                                 type="range"
                                 min="0.5"
                                 max="3"
@@ -2361,7 +2487,10 @@ function GraphEditorPageInner() {
                           {gridStyle === "lines" && (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium flex items-center gap-2">
+                                <label
+                                  htmlFor="grid-line-width"
+                                  className="text-sm font-medium flex items-center gap-2"
+                                >
                                   <span>━</span>
                                   <span>Line Width</span>
                                 </label>
@@ -2376,6 +2505,7 @@ function GraphEditorPageInner() {
                                 </span>
                               </div>
                               <input
+                                id="grid-line-width"
                                 type="range"
                                 min="0.5"
                                 max="5"
@@ -2414,7 +2544,10 @@ function GraphEditorPageInner() {
                           {/* Node Blur Slider */}
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                              <label className="text-sm font-medium flex items-center gap-2">
+                              <label
+                                htmlFor="node-blur"
+                                className="text-sm font-medium flex items-center gap-2"
+                              >
                                 <span>🌫️</span>
                                 <span>Background Blur</span>
                               </label>
@@ -2429,6 +2562,7 @@ function GraphEditorPageInner() {
                               </span>
                             </div>
                             <input
+                              id="node-blur"
                               type="range"
                               min="0"
                               max="20"

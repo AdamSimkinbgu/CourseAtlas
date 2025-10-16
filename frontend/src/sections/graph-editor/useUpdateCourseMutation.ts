@@ -25,16 +25,20 @@ export function useUpdateCourseMutation(graphId: string) {
   return useMutation({
     mutationFn: ({ courseId, data }: { courseId: string; data: UpdateCoursePayload }) =>
       updateCourse(courseId, data),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<GraphDetail | undefined>(["graph", graphId], (previous) => {
-        if (!previous) return previous;
-        return {
-          ...previous,
-          courses: previous.courses.map((course) =>
-            course.id === updated.id ? { ...course, ...updated } : course
-          ),
-        };
-      });
+    onSuccess: (updated, variables) => {
+      // Only update cache for non-position updates to avoid triggering re-renders during drag
+      // Position updates are handled optimistically in the drag handler
+      if (!variables.data.position) {
+        queryClient.setQueryData<GraphDetail | undefined>(["graph", graphId], (previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            courses: previous.courses.map((course) =>
+              course.id === updated.id ? { ...course, ...updated } : course
+            ),
+          };
+        });
+      }
     },
   });
 }

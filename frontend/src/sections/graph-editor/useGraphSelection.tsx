@@ -84,8 +84,6 @@ function reducer(state: SelectionState, action: Action): SelectionState {
           (currentTarget.type === "container" && nextContainers.includes(currentTarget.id))
         : false;
 
-      const singleCourse = nextCourses.length === 1 && nextContainers.length === 0;
-      const singleContainer = nextContainers.length === 1 && nextCourses.length === 0;
       const selectionContainsLastClicked =
         state.lastClicked &&
         ((state.lastClicked.type === "course" && nextCourses.includes(state.lastClicked.id)) ||

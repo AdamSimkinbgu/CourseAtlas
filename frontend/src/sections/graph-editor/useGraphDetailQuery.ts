@@ -4,41 +4,6 @@ import { api } from "../../lib/api";
 
 export type GraphVisibility = "private" | "public";
 
-type GraphDetailResponse = {
-  graph: {
-    id: string;
-    title: string;
-    description: string | null;
-    visibility: GraphVisibility;
-    is_template: boolean;
-    updated_at: string;
-    created_at: string;
-    containers: GraphContainer[];
-    container_assignments: Record<string, string>;
-  };
-  courses: CourseDetail[];
-};
-
-type CourseRaw = {
-  id: string;
-  graph_id: string;
-  code: string;
-  title: string;
-  credits: number;
-  term: string | null;
-  status: CourseStatus;
-  grade: string | null;
-  is_pass_fail: boolean;
-  position: {
-    x: number;
-    y: number;
-  };
-  notes: string | null;
-  prerequisites: CoursePrerequisite[];
-  created_at: string;
-  updated_at: string;
-};
-
 export type GraphDetail = {
   graph: {
     id: string;
@@ -86,6 +51,26 @@ export type CourseDetail = {
   is_pass_fail: boolean;
   position_x: number;
   position_y: number;
+  notes: string | null;
+  prerequisites: CoursePrerequisite[];
+  created_at: string;
+  updated_at: string;
+};
+
+type CourseRaw = {
+  id: string;
+  graph_id: string;
+  code: string;
+  title: string;
+  credits: number;
+  term: string | null;
+  status: CourseStatus;
+  grade: string | null;
+  is_pass_fail: boolean;
+  position: {
+    x: number;
+    y: number;
+  };
   notes: string | null;
   prerequisites: CoursePrerequisite[];
   created_at: string;

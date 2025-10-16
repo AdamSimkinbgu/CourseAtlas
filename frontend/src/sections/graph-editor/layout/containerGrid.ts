@@ -6,7 +6,6 @@ import {
   CONTAINER_PADDING,
   SLOT_HORIZONTAL_SPACING,
   SLOT_VERTICAL_SPACING,
-  snap,
   snapPoint,
   snapSize,
   type GridPoint,
