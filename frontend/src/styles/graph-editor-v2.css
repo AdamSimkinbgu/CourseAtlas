@@ -353,7 +353,7 @@
 	box-shadow: none !important; 
 	backdrop-filter: none !important; 
 	border-radius: 0 !important; 
-	z-index: 0 !important;
+	z-index: -1 !important;
 }
 
 .react-flow__node-container.selected { 
@@ -361,7 +361,7 @@
 	border: none !important; 
 	outline: none !important; 
 	background: transparent !important; 
-	z-index: 0 !important;
+	z-index: -1 !important;
 }
 
 .react-flow__node-container:focus { 
@@ -600,6 +600,10 @@
 }
 
 /* Edge styling */
+.react-flow__edge { 
+	z-index: 5 !important;
+}
+
 .react-flow__edge-smoothstep .react-flow__edge-path { 
 	stroke: #74809a; 
 	stroke-width: 2; 

@@ -1238,7 +1238,7 @@ function GraphEditorPageInner() {
         style: {
           width: normalized.width,
           height: normalized.height,
-          zIndex: 0,
+          zIndex: -1,
         },
         draggable: true,
         selectable: true,
@@ -1709,7 +1709,7 @@ function GraphEditorPageInner() {
         style: {
           width: container.width,
           height: container.height,
-          zIndex: 0,
+          zIndex: -1,
         },
         draggable: true,
         selectable: true,
