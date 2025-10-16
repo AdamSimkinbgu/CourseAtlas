@@ -3314,6 +3314,54 @@ type ContainerSidePanelProps = {
   theme: ThemeMode;
 };
 
+type MemberChipProps = {
+  member: CourseDetail;
+};
+
+function MemberChip({ member }: MemberChipProps) {
+  const titleRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLDivElement>(null);
+  const [titleOverflows, setTitleOverflows] = useState(false);
+  const [codeOverflows, setCodeOverflows] = useState(false);
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (titleRef.current) {
+        setTitleOverflows(titleRef.current.scrollWidth > titleRef.current.clientWidth);
+      }
+      if (codeRef.current) {
+        setCodeOverflows(codeRef.current.scrollWidth > codeRef.current.clientWidth);
+      }
+    };
+
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    return () => window.removeEventListener('resize', checkOverflow);
+  }, [member.title, member.code]);
+
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md border border-slate-300 bg-white text-xs shadow-sm transition hover:shadow-md dark:border-slate-600 dark:bg-slate-900/50">
+      <div className="flex-1 min-w-0 member-text-container">
+        <div
+          ref={titleRef}
+          className={`member-text-marquee font-semibold text-slate-700 dark:text-slate-200 ${titleOverflows ? 'is-overflowing' : ''}`}
+        >
+          <span data-text={member.title}>{member.title}</span>
+        </div>
+      </div>
+      <span className="text-slate-500 dark:text-slate-400 flex-shrink-0">•</span>
+      <div className="flex-1 min-w-0 member-text-container text-right">
+        <div
+          ref={codeRef}
+          className={`member-text-marquee text-slate-600 dark:text-slate-300 ${codeOverflows ? 'is-overflowing' : ''}`}
+        >
+          <span data-text={member.code}>{member.code}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ContainerSidePanel({
   container,
   members,
@@ -3412,24 +3460,47 @@ function ContainerSidePanel({
         </div>
       </div>
 
-      <div
-        className="overflow-hidden rounded-2xl border p-4 shadow-sm transition"
-        style={{
-          background: previewVisual.fill,
-          borderColor: previewVisual.border,
-          boxShadow:
-            theme === "dark"
-              ? DEFAULT_CONTAINER_FALLBACK.dark.shadow
-              : DEFAULT_CONTAINER_FALLBACK.light.shadow,
-        }}
-      >
-        <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-300">
-          <span>Preview</span>
-          <span className="rounded-full border border-white/40 px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/80">
-            {title || "Untitled"}
-          </span>
+      <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+        <span>Preview</span>
+        <div
+          className="overflow-hidden rounded-xl border-2 border-dashed shadow-sm transition"
+          style={{
+            background: previewVisual.fill,
+            borderColor: previewVisual.border,
+            boxShadow:
+              theme === "dark"
+                ? "inset 0 0 0 1px rgba(255,255,255,0.05), 0 4px 20px -4px rgba(0,0,0,0.2)"
+                : "inset 0 0 0 1px rgba(255,255,255,0.05), 0 4px 20px -4px rgba(0,0,0,0.2)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b-2 border-dashed text-xs font-semibold"
+            style={{
+              background: `linear-gradient(135deg, ${previewVisual.border}33 0%, ${previewVisual.border}1a 100%)`,
+              borderBottomColor: previewVisual.border,
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <span className="text-slate-700 dark:text-slate-200">
+              {title || "Untitled"}
+            </span>
+            <span
+              className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide font-bold"
+              style={{
+                background: `${previewVisual.border}66`,
+                borderColor: `${previewVisual.border}99`,
+                color: "rgba(255,255,255,0.9)",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
+              }}
+            >
+              {members.length} {members.length === 1 ? "COURSE" : "COURSES"}
+            </span>
+          </div>
+          <div className="p-4 h-24 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">
+            Container body
+          </div>
         </div>
-        <div className="mt-3 h-20 rounded-xl border border-dashed border-white/30 bg-white/5 dark:border-slate-500/40 dark:bg-white/5" />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -3439,25 +3510,20 @@ function ContainerSidePanel({
             Drag a course into this container to assign it.
           </p>
         ) : (
-          <ul className="space-y-1 text-xs">
+          <div className="flex flex-col gap-2">
             {members.map((member) => (
-              <li key={member.id} className="flex items-center justify-between gap-2">
-                <span className="font-medium text-slate-700 dark:text-slate-200">
-                  {member.code}
-                </span>
-                <span className="truncate text-slate-500 dark:text-slate-400">{member.title}</span>
-              </li>
+              <MemberChip key={member.id} member={member} />
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
-      <button
+      {/* <button
         type="submit"
         className="mt-auto rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark"
       >
         Save changes
-      </button>
+      </button> */}
     </form>
   );
 }

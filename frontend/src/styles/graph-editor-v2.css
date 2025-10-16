@@ -649,3 +649,40 @@
 		transform: translateY(0);
 	} 
 }
+
+/* Marquee animation for member text */
+@keyframes marquee {
+	0% {
+		transform: translateX(0);
+	}
+	100% {
+		transform: translateX(calc(-100% - 2rem));
+	}
+}
+
+.member-text-container {
+	min-width: 0;
+	overflow: hidden;
+	position: relative;
+}
+
+.member-text-marquee {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: block;
+}
+
+.member-text-container:hover .member-text-marquee.is-overflowing {
+	overflow: visible;
+}
+
+.member-text-container:hover .member-text-marquee.is-overflowing > span {
+	display: inline-block;
+	animation: marquee 6s linear infinite;
+}
+
+.member-text-container:hover .member-text-marquee.is-overflowing > span::after {
+	content: attr(data-text);
+	padding-left: 2rem;
+}
