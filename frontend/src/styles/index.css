@@ -157,18 +157,77 @@ body.dark .course-node__codepill {
 
 .course-node__grade {
   font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 6px;
+  font-weight: 700;
+  padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
-  color: #1e293b;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  border: 1px solid #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 body.dark .course-node__grade {
-  background: rgba(15, 23, 42, 0.75);
-  color: rgba(226, 232, 240, 0.9);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  color: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
+}
+
+/* Grade tier specific colors */
+.course-node__grade.grade-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  border-color: #d97706;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.4);
+  color: #ffffff;
+}
+
+body.dark .course-node__grade.grade-gold {
+  background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 100%);
+  border-color: #fbbf24;
+  box-shadow: 0 2px 8px rgba(252, 211, 77, 0.4);
+  color: #1e293b;
+}
+
+.course-node__grade.grade-silver {
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  border-color: #7c3aed;
+  box-shadow: 0 2px 8px rgba(167, 139, 250, 0.4);
+  color: #ffffff;
+}
+
+body.dark .course-node__grade.grade-silver {
+  background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%);
+  border-color: #a78bfa;
+  box-shadow: 0 2px 8px rgba(196, 181, 253, 0.4);
+  color: #1e293b;
+}
+
+.course-node__grade.grade-bronze {
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  border-color: #0f766e;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.4);
+  color: #ffffff;
+}
+
+body.dark .course-node__grade.grade-bronze {
+  background: linear-gradient(135deg, #5eead4 0%, #2dd4bf 100%);
+  border-color: #14b8a6;
+  box-shadow: 0 2px 8px rgba(94, 234, 212, 0.4);
+  color: #1e293b;
+}
+
+.course-node__grade.grade-fail {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: #b91c1c;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  color: #ffffff;
+}
+
+body.dark .course-node__grade.grade-fail {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  border-color: #dc2626;
+  box-shadow: 0 2px 8px rgba(248, 113, 113, 0.4);
+  color: #ffffff;
 }
 
 .course-node__status {
@@ -258,6 +317,11 @@ body.dark .course-node__subtext {
 /* Background grid styling */
 .react-flow__background {
   background-color: transparent;
+}
+
+/* Control line thickness via CSS custom property */
+.react-flow__background-pattern line {
+  stroke-width: var(--grid-line-width, 1);
 }
 
 /* Controls styling matching Course Mermaid Sequence Maker */

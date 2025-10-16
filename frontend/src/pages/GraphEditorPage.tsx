@@ -719,9 +719,10 @@ function GraphEditorPageInner() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGraphActionsOpen, setIsGraphActionsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [showGridDebug, setShowGridDebug] = useState(false);
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [gridStyle, setGridStyle] = useState<"dots" | "lines">("dots");
+  const [gridDotSize, setGridDotSize] = useState(1);
+  const [gridLineWidth, setGridLineWidth] = useState(1);
   const {
     courses: selectedCourseIds,
     containers: selectedContainerIds,
@@ -749,11 +750,6 @@ function GraphEditorPageInner() {
   const assignmentsRef = useRef<Record<string, string>>(courseAssignments);
   const containerPersistTimeoutRef = useRef<number | null>(null);
   const graphMutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
-  const gridDebugRef = useRef(false);
-
-  useEffect(() => {
-    gridDebugRef.current = showGridDebug;
-  }, [showGridDebug]);
 
   const updateGraphCache = useCallback(
     (updater: (draft: GraphDetail) => void) => {
@@ -854,13 +850,6 @@ function GraphEditorPageInner() {
         const parkedPosition = previousContainerNode
           ? parkCourseOutsideContainer(previousContainerNode, absoluteBefore)
           : snapPoint(absoluteBefore);
-        if (import.meta.env?.DEV && gridDebugRef.current) {
-          console.debug("[grid debug] park course", {
-            courseId,
-            previousParent,
-            position: parkedPosition,
-          });
-        }
         courseNode = {
           ...courseNode,
           parentNode: undefined,
@@ -882,12 +871,6 @@ function GraphEditorPageInner() {
           parentNode: nextParent,
           extent: "parent",
         } satisfies Node<CourseNodeData>;
-        if (import.meta.env?.DEV && gridDebugRef.current) {
-          console.debug("[grid debug] stage course for container", {
-            courseId,
-            nextParent,
-          });
-        }
       }
 
       updated[courseIndex] = courseNode;
@@ -898,7 +881,7 @@ function GraphEditorPageInner() {
           previousParent,
           assignments,
           courseOrderIndex,
-          gridDebugRef.current
+          false
         );
       }
 
@@ -908,7 +891,7 @@ function GraphEditorPageInner() {
           nextParent,
           assignments,
           courseOrderIndex,
-          gridDebugRef.current
+          false
         );
       }
 
@@ -1495,7 +1478,7 @@ function GraphEditorPageInner() {
             node.id,
             assignmentsRef.current,
             courseOrderIndex,
-            gridDebugRef.current
+            false
           );
         });
         scheduleContainerPersistence();
@@ -1512,7 +1495,7 @@ function GraphEditorPageInner() {
               parentId,
               assignmentsRef.current,
               courseOrderIndex,
-              gridDebugRef.current
+              false
             )
           );
         } else {
@@ -2124,11 +2107,11 @@ function GraphEditorPageInner() {
   const graphActionsButtonClasses =
     theme === "dark"
       ? "rounded-full border border-blue-400/50 bg-gradient-to-br from-blue-500/30 to-blue-600/20 px-4 py-2.5 text-sm font-semibold text-blue-100 shadow-[0_8px_32px_-12px_rgba(59,130,246,0.6)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.8)] hover:border-blue-400/70 hover:from-blue-500/40 hover:to-blue-600/30"
-      : "rounded-full border border-blue-300 bg-gradient-to-br from-blue-50 to-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-[0_8px_32px_-12px_rgba(59,130,246,0.3)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.5)] hover:border-blue-400 hover:from-blue-100 hover:to-blue-50";
+      : "rounded-full border border-blue-400/60 bg-gradient-to-br from-blue-500/90 to-blue-600/80 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_32px_-12px_rgba(59,130,246,0.4)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.6)] hover:border-blue-500/70 hover:from-blue-600/95 hover:to-blue-700/85";
   const graphActionPanelClasses =
     theme === "dark"
       ? "min-w-[280px] rounded-2xl border border-slate-700/60 bg-slate-950/90 p-4 text-sm text-slate-100 shadow-[0_32px_64px_-24px_rgba(0,0,0,0.5)] backdrop-blur-xl"
-      : "min-w-[280px] rounded-2xl border border-slate-200/80 bg-white/95 p-4 text-sm text-slate-700 shadow-[0_32px_64px_-24px_rgba(15,23,42,0.2)] backdrop-blur-xl";
+      : "min-w-[280px] rounded-2xl border border-slate-300/80 bg-white/98 p-4 text-sm text-slate-800 shadow-[0_32px_64px_-24px_rgba(15,23,42,0.25)] backdrop-blur-xl";
   const menuItemClasses =
     theme === "dark"
       ? "w-full rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-900/70 focus:outline-none"
@@ -2138,7 +2121,7 @@ function GraphEditorPageInner() {
   const graphActionItemClasses =
     theme === "dark"
       ? "w-full rounded-lg bg-slate-900/50 px-4 py-2.5 text-left font-medium text-slate-200 transition-all duration-150 hover:bg-slate-800/70 hover:pl-5 focus:outline-none active:scale-[0.98]"
-      : "w-full rounded-lg bg-slate-50/50 px-4 py-2.5 text-left font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:pl-5 focus:outline-none active:scale-[0.98]";
+      : "w-full rounded-lg bg-slate-100/80 px-4 py-2.5 text-left font-medium text-slate-800 transition-all duration-150 hover:bg-slate-200/90 hover:pl-5 focus:outline-none active:scale-[0.98]";
   const handleOpenDetailsSurface = useCallback(() => {
     if (selectionCount === 0) return;
     if (isMultiSelection) {
@@ -2459,9 +2442,10 @@ function GraphEditorPageInner() {
                   instance.fitView({ padding: canvasFitViewPadding });
                 }}
                 minZoom={canvasMinZoom}
-                showGridDebug={showGridDebug}
                 showMiniMap={showMiniMap}
                 gridStyle={gridStyle}
+                gridDotSize={gridDotSize}
+                gridLineWidth={gridLineWidth}
               />
             </ReactFlowProvider>
 
@@ -2517,7 +2501,7 @@ function GraphEditorPageInner() {
                       <div className="space-y-5">
                         {/* Appearance Section */}
                         <div className="space-y-3">
-                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
                             Appearance
                           </div>
                           
@@ -2532,10 +2516,10 @@ function GraphEditorPageInner() {
                                 onClick={() => theme === "dark" && handleThemeToggle()}
                                 className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
                                   theme === "light"
-                                    ? "bg-gradient-to-br from-amber-100 to-orange-100 text-orange-700 border border-orange-300 shadow-sm"
+                                    ? "bg-gradient-to-br from-amber-400/95 to-orange-500/95 text-white border border-orange-400 shadow-md"
                                     : theme === "dark"
                                       ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40 hover:text-slate-300"
-                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
                                 }`}
                               >
                                 ☀️ Light
@@ -2546,7 +2530,7 @@ function GraphEditorPageInner() {
                                 className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
                                   theme === "dark"
                                     ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/30 text-indigo-200 border border-indigo-400/50 shadow-sm"
-                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                    : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
                                 }`}
                               >
                                 🌙 Dark
@@ -2567,10 +2551,10 @@ function GraphEditorPageInner() {
                                   gridStyle === "dots"
                                     ? theme === "dark"
                                       ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
-                                      : "bg-blue-100 text-blue-700 border border-blue-300 shadow-sm"
+                                      : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
                                     : theme === "dark"
                                       ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
                                 }`}
                               >
                                 •• Dots
@@ -2582,10 +2566,10 @@ function GraphEditorPageInner() {
                                   gridStyle === "lines"
                                     ? theme === "dark"
                                       ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
-                                      : "bg-blue-100 text-blue-700 border border-blue-300 shadow-sm"
+                                      : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
                                     : theme === "dark"
                                       ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
                                 }`}
                               >
                                 ⊞ Lines
@@ -2595,11 +2579,11 @@ function GraphEditorPageInner() {
                         </div>
 
                         {/* Divider */}
-                        <div className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-200"}`} />
+                        <div className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-300"}`} />
 
                         {/* Features Section */}
                         <div className="space-y-3">
-                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
                             Features
                           </div>
 
@@ -2615,37 +2599,95 @@ function GraphEditorPageInner() {
                                 showMiniMap
                                   ? theme === "dark"
                                     ? "bg-gradient-to-br from-emerald-500/30 to-green-500/30 text-emerald-200 border border-emerald-400/50 shadow-sm"
-                                    : "bg-gradient-to-br from-emerald-100 to-green-100 text-emerald-700 border border-emerald-300 shadow-sm"
+                                    : "bg-gradient-to-br from-emerald-500/95 to-green-600/95 text-white border border-emerald-500 shadow-md"
                                   : theme === "dark"
                                     ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                    : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
                               }`}
                             >
                               {showMiniMap ? "✓ Shown" : "Hidden"}
                             </button>
                           </div>
+                        </div>
+                      </div>
 
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">🐛</span>
-                              <span className="text-sm font-medium">Grid Debug</span>
+                      {/* Grid Thickness Controls */}
+                      <div className={`${
+                        theme === "dark"
+                          ? "bg-slate-800/40 border-slate-700/50"
+                          : "bg-white/60 border-slate-200"
+                      } backdrop-blur-sm rounded-xl p-5 border shadow-md`}>
+                        <h3 className={`text-sm font-semibold mb-4 ${
+                          theme === "dark" ? "text-slate-200" : "text-slate-800"
+                        }`}>
+                          Grid Thickness
+                        </h3>
+                        <div className="space-y-4">
+                          {/* Dot Size Slider - Only show when dots are active */}
+                          {gridStyle === "dots" && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                  <span>⚫</span>
+                                  <span>Dot Size</span>
+                                </label>
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                  theme === "dark"
+                                    ? "bg-slate-700/50 text-slate-300"
+                                    : "bg-slate-200 text-slate-700"
+                                }`}>
+                                  {gridDotSize.toFixed(1)}px
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0.5"
+                                max="3"
+                                step="0.1"
+                                value={gridDotSize}
+                                onChange={(e) => setGridDotSize(parseFloat(e.target.value))}
+                                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                                style={{
+                                  background: theme === "dark"
+                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)"
+                                }}
+                              />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowGridDebug((prev) => !prev)}
-                              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 min-w-[85px] ${
-                                showGridDebug
-                                  ? theme === "dark"
-                                    ? "bg-gradient-to-br from-amber-500/30 to-yellow-500/30 text-amber-200 border border-amber-400/50 shadow-sm"
-                                    : "bg-gradient-to-br from-amber-100 to-yellow-100 text-amber-700 border border-amber-300 shadow-sm"
-                                  : theme === "dark"
-                                    ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
-                              }`}
-                            >
-                              {showGridDebug ? "✓ Shown" : "Hidden"}
-                            </button>
-                          </div>
+                          )}
+
+                          {/* Line Width Slider - Only show when lines are active */}
+                          {gridStyle === "lines" && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                  <span>━</span>
+                                  <span>Line Width</span>
+                                </label>
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                  theme === "dark"
+                                    ? "bg-slate-700/50 text-slate-300"
+                                    : "bg-slate-200 text-slate-700"
+                                }`}>
+                                  {gridLineWidth.toFixed(1)}px
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0.5"
+                                max="5"
+                                step="0.1"
+                                value={gridLineWidth}
+                                onChange={(e) => setGridLineWidth(parseFloat(e.target.value))}
+                                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                                style={{
+                                  background: theme === "dark"
+                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)"
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2771,9 +2813,10 @@ type GraphEditorCanvasProps = {
   onReady: (instance: ReactFlowInstance) => void;
   minZoom: number;
   theme: ThemeMode;
-  showGridDebug: boolean;
   showMiniMap: boolean;
   gridStyle: "dots" | "lines";
+  gridDotSize: number;
+  gridLineWidth: number;
 };
 
 function GraphEditorCanvas({
@@ -2793,9 +2836,10 @@ function GraphEditorCanvas({
   onReady,
   minZoom,
   theme,
-  showGridDebug,
   showMiniMap,
   gridStyle,
+  gridDotSize,
+  gridLineWidth,
 }: GraphEditorCanvasProps) {
   const themeTokens = THEME_TOKENS[theme];
   const flowBackground = "";
@@ -2982,17 +3026,6 @@ function GraphEditorCanvas({
 
   return (
     <div className={`relative h-full w-full overflow-hidden ${flowBackground}`}>
-      {showGridDebug ? (
-        <div
-          className="pointer-events-none absolute inset-0 z-[1]"
-          style={{
-            backgroundSize: `${GRID_CONFIG.UNIT}px ${GRID_CONFIG.UNIT}px`,
-            backgroundImage:
-              "linear-gradient(to right, rgba(59,130,246,0.12) 1px, transparent 1px), " +
-              "linear-gradient(to bottom, rgba(59,130,246,0.12) 1px, transparent 1px)",
-          }}
-        />
-      ) : null}
       <ReactFlow
         style={canvasStyle}
         nodes={nodes}
@@ -3035,12 +3068,23 @@ function GraphEditorCanvas({
           showInteractive={false}
           style={controlsStyle}
         />
-        <Background
-          variant={gridStyle === "dots" ? BackgroundVariant.Dots : BackgroundVariant.Lines}
-          gap={gridStyle === "dots" ? 20 : 24}
-          size={gridStyle === "dots" ? 1 : undefined}
-          color={theme === "dark" ? "#2a3344" : "#dce2ea"}
-        />
+        {gridStyle === "dots" ? (
+          <Background
+            key="dots"
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={gridDotSize}
+            color={theme === "dark" ? "#2a3344" : "#dce2ea"}
+          />
+        ) : (
+          <Background
+            key="lines"
+            variant={BackgroundVariant.Lines}
+            gap={24}
+            color={theme === "dark" ? "#2a3344" : "#dce2ea"}
+            style={{ "--grid-line-width": gridLineWidth } as React.CSSProperties}
+          />
+        )}
       </ReactFlow>
     </div>
   );
