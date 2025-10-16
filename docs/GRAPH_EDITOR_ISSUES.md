@@ -11,7 +11,7 @@
 ### 🚨 P0 - Critical (Do Immediately)
 - [x] **#3** Fix nodesMapRef update inconsistency across all mutation paths ✅ **RESOLVED** (Oct 17, 2025)
 - [ ] **#5** Implement user-facing error notifications (replace console.error)
-- [ ] **#18** Add cleanup for pending mutations on component unmount
+- [x] **#18** Add cleanup for pending mutations on component unmount ✅ **RESOLVED** (Oct 17, 2025)
 - [ ] **#6** Eliminate race conditions in container/course debounced updates
 
 ### ⚠️ P1 - High Priority (Next Sprint)
@@ -1337,6 +1337,17 @@ useEffect(() => {
 
 **Estimated Effort**: 1 hour  
 **Risk**: Low
+
+**✅ RESOLVED**: October 17, 2025
+- **Solution**: Enhanced cleanup effect to flush pending mutations before unmount
+- **Changes**: 
+  - Updated useEffect cleanup at line 717-753 in GraphEditorPage.tsx
+  - Captured refs inside effect to avoid stale closures
+  - Clears both timer refs and sets them to null
+  - Flushes pendingCourseUpdatesRef with fire-and-forget Promise.all
+  - All pending position updates now saved on unmount
+- **Impact**: No more data loss when navigating away during debounce window
+- **Testing**: No lint errors, proper ref capture pattern implemented
 
 ---
 

@@ -714,16 +714,44 @@ function GraphEditorPageInner() {
   }, [detailQuery, updateCourseMutation]);
 
   useEffect(() => {
+    // Capture refs for cleanup (#18)
+    const courseTimeoutRef = coursePositionUpdateTimeoutRef;
+    const containerTimeoutRef = containerPersistTimeoutRef;
+    const pendingUpdates = pendingCourseUpdatesRef;
+    const mutation = updateCourseMutation;
+
     return () => {
       // Cleanup: flush pending updates on unmount
-      if (coursePositionUpdateTimeoutRef.current !== null) {
-        window.clearTimeout(coursePositionUpdateTimeoutRef.current);
+      if (courseTimeoutRef.current !== null) {
+        window.clearTimeout(courseTimeoutRef.current);
+        courseTimeoutRef.current = null;
       }
-      if (containerPersistTimeoutRef.current !== null) {
-        window.clearTimeout(containerPersistTimeoutRef.current);
+      if (containerTimeoutRef.current !== null) {
+        window.clearTimeout(containerTimeoutRef.current);
+        containerTimeoutRef.current = null;
+      }
+
+      // Flush pending course position updates immediately to prevent data loss
+      if (pendingUpdates.current.size > 0) {
+        const updates = Array.from(pendingUpdates.current.entries());
+        pendingUpdates.current.clear();
+
+        // Fire and forget - don't wait for completion
+        Promise.all(
+          updates.map(([courseId, position]) =>
+            mutation
+              .mutateAsync({
+                courseId,
+                data: { position },
+              })
+              .catch((error) => {
+                console.error(`Failed to flush course ${courseId} position on unmount`, error);
+              })
+          )
+        );
       }
     };
-  }, []);
+  }, [updateCourseMutation]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
