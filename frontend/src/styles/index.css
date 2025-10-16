@@ -320,8 +320,11 @@ body.dark .course-node__subtext {
 }
 
 /* Control line thickness via CSS custom property */
-.react-flow__background-pattern line {
-  stroke-width: var(--grid-line-width, 1);
+/* Multiple selectors to ensure it works */
+.react-flow__background-pattern line,
+.react-flow__background line,
+.react-flow__background path {
+  stroke-width: var(--grid-line-width, 1) !important;
 }
 
 /* Controls styling matching Course Mermaid Sequence Maker */
