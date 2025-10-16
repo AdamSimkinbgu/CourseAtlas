@@ -2123,12 +2123,12 @@ function GraphEditorPageInner() {
       : "absolute left-full top-0 ml-3 w-52 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.22)]";
   const graphActionsButtonClasses =
     theme === "dark"
-      ? "rounded-full border border-blue-400/40 bg-[linear-gradient(135deg,rgba(59,130,246,0.28),rgba(59,130,246,0.1))] px-4 py-2 text-sm font-semibold text-slate-50 shadow-[0_25px_60px_-35px_rgba(30,64,175,0.7)] transition hover:bg-[rgba(59,130,246,0.32)]"
-      : "rounded-full border border-blue-300 bg-[linear-gradient(135deg,rgba(59,130,246,0.18),white)] px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_20px_50px_-30px_rgba(30,64,175,0.25)] transition hover:bg-[rgba(191,219,254,0.45)]";
+      ? "rounded-full border border-blue-400/50 bg-gradient-to-br from-blue-500/30 to-blue-600/20 px-4 py-2.5 text-sm font-semibold text-blue-100 shadow-[0_8px_32px_-12px_rgba(59,130,246,0.6)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.8)] hover:border-blue-400/70 hover:from-blue-500/40 hover:to-blue-600/30"
+      : "rounded-full border border-blue-300 bg-gradient-to-br from-blue-50 to-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-[0_8px_32px_-12px_rgba(59,130,246,0.3)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_12px_40px_-12px_rgba(59,130,246,0.5)] hover:border-blue-400 hover:from-blue-100 hover:to-blue-50";
   const graphActionPanelClasses =
     theme === "dark"
-      ? "flex flex-col gap-2 rounded-2xl border border-slate-700/60 bg-slate-950/85 p-3 text-sm text-slate-100 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.9)] backdrop-blur"
-      : "flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.24)] backdrop-blur";
+      ? "min-w-[280px] rounded-2xl border border-slate-700/60 bg-slate-950/90 p-4 text-sm text-slate-100 shadow-[0_32px_64px_-24px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+      : "min-w-[280px] rounded-2xl border border-slate-200/80 bg-white/95 p-4 text-sm text-slate-700 shadow-[0_32px_64px_-24px_rgba(15,23,42,0.2)] backdrop-blur-xl";
   const menuItemClasses =
     theme === "dark"
       ? "w-full rounded-xl px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-900/70 focus:outline-none"
@@ -2137,8 +2137,8 @@ function GraphEditorPageInner() {
     theme === "dark" ? "text-rose-300 hover:bg-rose-500/10" : "text-rose-600 hover:bg-rose-50";
   const graphActionItemClasses =
     theme === "dark"
-      ? "rounded-full bg-slate-900/70 px-4 py-2 text-left text-slate-200 transition hover:bg-slate-900 focus:outline-none"
-      : "rounded-full bg-white px-4 py-2 text-left text-slate-700 transition hover:bg-slate-100 focus:outline-none";
+      ? "w-full rounded-lg bg-slate-900/50 px-4 py-2.5 text-left font-medium text-slate-200 transition-all duration-150 hover:bg-slate-800/70 hover:pl-5 focus:outline-none active:scale-[0.98]"
+      : "w-full rounded-lg bg-slate-50/50 px-4 py-2.5 text-left font-medium text-slate-700 transition-all duration-150 hover:bg-slate-100 hover:pl-5 focus:outline-none active:scale-[0.98]";
   const handleOpenDetailsSurface = useCallback(() => {
     if (selectionCount === 0) return;
     if (isMultiSelection) {
@@ -2375,30 +2375,6 @@ function GraphEditorPageInner() {
           setIsGraphActionsOpen(false);
         },
       },
-      {
-        label: showMiniMap ? "Hide minimap" : "Show minimap",
-        disabled: false,
-        action: () => {
-          setShowMiniMap((prev) => !prev);
-          setIsGraphActionsOpen(false);
-        },
-      },
-      {
-        label: showGridDebug ? "Hide grid debug" : "Show grid debug",
-        disabled: false,
-        action: () => {
-          setShowGridDebug((prev) => !prev);
-          setIsGraphActionsOpen(false);
-        },
-      },
-      {
-        label: "Toggle theme",
-        disabled: false,
-        action: () => {
-          handleThemeToggle();
-          setIsGraphActionsOpen(false);
-        },
-      },
     ],
     [
       canvasFitViewPadding,
@@ -2408,12 +2384,9 @@ function GraphEditorPageInner() {
       handleImportClick,
       handleResetLargeSample,
       handleResetSmallSample,
-      handleThemeToggle,
       isExporting,
       isImporting,
       reactFlowToolbarActions,
-      showMiniMap,
-      showGridDebug,
     ]
   );
 
@@ -2541,39 +2514,136 @@ function GraphEditorPageInner() {
                   </button>
                   {isSettingsOpen ? (
                     <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-sm font-medium">Grid Style</span>
-                          <div className="flex gap-2">
+                      <div className="space-y-5">
+                        {/* Appearance Section */}
+                        <div className="space-y-3">
+                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                            Appearance
+                          </div>
+                          
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🎨</span>
+                              <span className="text-sm font-medium">Theme</span>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => theme === "dark" && handleThemeToggle()}
+                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                  theme === "light"
+                                    ? "bg-gradient-to-br from-amber-100 to-orange-100 text-orange-700 border border-orange-300 shadow-sm"
+                                    : theme === "dark"
+                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40 hover:text-slate-300"
+                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                }`}
+                              >
+                                ☀️ Light
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => theme === "light" && handleThemeToggle()}
+                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                  theme === "dark"
+                                    ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/30 text-indigo-200 border border-indigo-400/50 shadow-sm"
+                                    : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                }`}
+                              >
+                                🌙 Dark
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">⊞</span>
+                              <span className="text-sm font-medium">Grid Style</span>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setGridStyle("dots")}
+                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                  gridStyle === "dots"
+                                    ? theme === "dark"
+                                      ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
+                                      : "bg-blue-100 text-blue-700 border border-blue-300 shadow-sm"
+                                    : theme === "dark"
+                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
+                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                }`}
+                              >
+                                •• Dots
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGridStyle("lines")}
+                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                  gridStyle === "lines"
+                                    ? theme === "dark"
+                                      ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
+                                      : "bg-blue-100 text-blue-700 border border-blue-300 shadow-sm"
+                                    : theme === "dark"
+                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
+                                      : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
+                                }`}
+                              >
+                                ⊞ Lines
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-200"}`} />
+
+                        {/* Features Section */}
+                        <div className="space-y-3">
+                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                            Features
+                          </div>
+
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🗺️</span>
+                              <span className="text-sm font-medium">Minimap</span>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => setGridStyle("dots")}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                                gridStyle === "dots"
+                              onClick={() => setShowMiniMap((prev) => !prev)}
+                              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 min-w-[85px] ${
+                                showMiniMap
                                   ? theme === "dark"
-                                    ? "bg-blue-500/30 text-blue-200 border border-blue-400/50"
-                                    : "bg-blue-100 text-blue-700 border border-blue-300"
+                                    ? "bg-gradient-to-br from-emerald-500/30 to-green-500/30 text-emerald-200 border border-emerald-400/50 shadow-sm"
+                                    : "bg-gradient-to-br from-emerald-100 to-green-100 text-emerald-700 border border-emerald-300 shadow-sm"
                                   : theme === "dark"
-                                    ? "bg-slate-800/50 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50"
+                                    ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
                                     : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
                               }`}
                             >
-                              Dots
+                              {showMiniMap ? "✓ Shown" : "Hidden"}
                             </button>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🐛</span>
+                              <span className="text-sm font-medium">Grid Debug</span>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => setGridStyle("lines")}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                                gridStyle === "lines"
+                              onClick={() => setShowGridDebug((prev) => !prev)}
+                              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 min-w-[85px] ${
+                                showGridDebug
                                   ? theme === "dark"
-                                    ? "bg-blue-500/30 text-blue-200 border border-blue-400/50"
-                                    : "bg-blue-100 text-blue-700 border border-blue-300"
+                                    ? "bg-gradient-to-br from-amber-500/30 to-yellow-500/30 text-amber-200 border border-amber-400/50 shadow-sm"
+                                    : "bg-gradient-to-br from-amber-100 to-yellow-100 text-amber-700 border border-amber-300 shadow-sm"
                                   : theme === "dark"
-                                    ? "bg-slate-800/50 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50"
+                                    ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
                                     : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200"
                               }`}
                             >
-                              Lines
+                              {showGridDebug ? "✓ Shown" : "Hidden"}
                             </button>
                           </div>
                         </div>
@@ -2596,53 +2666,65 @@ function GraphEditorPageInner() {
                   </button>
                   {isGraphActionsOpen ? (
                     <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
-                      {graphActionItems.map((item) => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={item.action}
-                          disabled={item.disabled}
-                          className={`${graphActionItemClasses} ${item.disabled ? "cursor-not-allowed opacity-50" : ""
+                      <div className="space-y-1.5">
+                        {graphActionItems.map((item, index) => (
+                          <button
+                            key={item.label}
+                            type="button"
+                            onClick={item.action}
+                            disabled={item.disabled}
+                            className={`${graphActionItemClasses} ${
+                              item.disabled ? "cursor-not-allowed opacity-40" : ""
+                            } ${
+                              index === 0 ? "" : ""
                             }`}
-                        >
-                          {item.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleOpenDetailsSurface}
-              disabled={!canOpenInspector}
-              className="pointer-events-auto absolute bottom-6 right-6 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
-            >
-              {canOpenInspector ? "Open details" : "Select an item"}
-            </button>
-
-            {isLargeViewport && isDetailOpen && hasSelection ? (
-              <div className="pointer-events-auto absolute right-6 top-32 z-20 w-[24rem] max-w-full">
-                <div className={inspectorBubbleClasses}>
-                  <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
-                    <span>Details</span>
-                    <button
-                      type="button"
-                      onClick={() => closeSelectionDetail()}
-                      className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <div
-                    className="max-h-[70vh] overflow-y-auto pr-1"
-                    data-testid="inspector-expanded"
-                  >
-                    {inspectorContent}
-                  </div>
+                          >
+                            <span className="flex items-center justify-between gap-3">
+                              <span>{item.label}</span>
+                              {!item.disabled && (
+                                <span className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>→</span>
+                              )}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
+
+              <button
+                type="button"
+                onClick={handleOpenDetailsSurface}
+                disabled={!canOpenInspector}
+                className="pointer-events-auto absolute bottom-6 right-6 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
+              >
+                {canOpenInspector ? "Open details" : "Select an item"}
+              </button>
+
+              {isLargeViewport && isDetailOpen && hasSelection ? (
+                <div className="pointer-events-auto absolute right-6 top-32 z-20 w-[24rem] max-w-full">
+                  <div className={inspectorBubbleClasses}>
+                    <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
+                      <span>Details</span>
+                      <button
+                        type="button"
+                        onClick={() => closeSelectionDetail()}
+                        className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div
+                      className="max-h-[70vh] overflow-y-auto pr-1"
+                      data-testid="inspector-expanded"
+                    >
+                      {inspectorContent}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
