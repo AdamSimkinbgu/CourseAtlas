@@ -45,14 +45,14 @@ describe("MultiSelectionInspector", () => {
             courses: [makeCourse({ id: "course-2", code: "CS102", title: "Data Structures" })],
           },
         ]}
-        ungroupedCourses={[makeCourse({ id: "course-3", code: "CS103", title: "Independent Study" })]}
+        ungroupedCourses={[
+          makeCourse({ id: "course-3", code: "CS103", title: "Independent Study" }),
+        ]}
         totals={{ containerCount: 2, courseCount: 3 }}
       />
     );
 
-    expect(
-      screen.getByText("2 containers · 3 courses")
-    ).toBeInTheDocument();
+    expect(screen.getByText("2 containers · 3 courses")).toBeInTheDocument();
 
     const sections = Array.from(container.querySelectorAll("section"));
     expect(sections).toHaveLength(3);

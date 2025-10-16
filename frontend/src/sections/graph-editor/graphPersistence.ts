@@ -29,7 +29,10 @@ export function createAssignmentsPersistence(options: {
 }) {
   const { graphId, enqueueMutation, updateGraphCache, updateGraphMutation } = options;
 
-  return async function persistAssignments(assignments: AssignmentsMap, validCourseIds: Set<string>) {
+  return async function persistAssignments(
+    assignments: AssignmentsMap,
+    validCourseIds: Set<string>
+  ) {
     if (!graphId) return;
     const sanitized = sanitizeAssignments(assignments, validCourseIds);
     const rollback = updateGraphCache((draft) => {

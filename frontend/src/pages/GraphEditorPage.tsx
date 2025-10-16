@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type CSSProperties,
   type FormEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -24,7 +23,6 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   NodeProps,
-  NodeResizer,
   type MiniMapNodeProps,
   type Connection,
   type EdgeChange,
@@ -44,7 +42,10 @@ import {
   type GraphDetail,
   useGraphDetailQuery,
 } from "../sections/graph-editor/useGraphDetailQuery";
-import { GraphSelectionProvider, useGraphSelection } from "../sections/graph-editor/useGraphSelection";
+import {
+  GraphSelectionProvider,
+  useGraphSelection,
+} from "../sections/graph-editor/useGraphSelection";
 import { useCreateCourseMutation } from "../sections/graph-editor/useCreateCourseMutation";
 import { useUpdateCourseMutation } from "../sections/graph-editor/useUpdateCourseMutation";
 import { useUpdatePrerequisitesMutation } from "../sections/graph-editor/useUpdatePrerequisitesMutation";
@@ -74,32 +75,12 @@ import {
   type ContainerPaletteColor,
   type StatusKey,
 } from "../styles/tokens";
-import { useCollisionDetection } from "../sections/graph-editor/useCollisionDetection";
 import {
-  COURSE_GAP,
   COURSE_SLOT_HEIGHT,
   COURSE_SLOT_WIDTH,
-  CONTAINER_HEADER_HEIGHT,
-  CONTAINER_PADDING,
   GRID_CONFIG,
-  SLOT_HORIZONTAL_SPACING,
-  SLOT_VERTICAL_SPACING,
-  analyseOccupiedSlots,
-  collectSlotSet,
-  containerSizeForGrid,
-  deriveMetricsFromSize,
-  findFirstAvailableSlot,
-  metricsFromLayouts,
-  pickLeastPopulatedEdge,
-  positionToSlot,
-  snap,
   snapPoint,
   snapSize,
-  slotKey,
-  slotToPosition,
-  expandContainerLayouts,
-  type CourseLayout,
-  type Slot,
 } from "../sections/graph-editor/layout";
 import smallSampleRaw from "../fixtures/smallSampleGraph.json";
 import largeSampleRaw from "../fixtures/largeSampleGraph.json";
@@ -118,18 +99,12 @@ type ContainerNodeData = {
   container: ContainerShape;
   onSelect: (containerId: string) => void;
   courseCount: number;
-  grid?: {
-    columns: number;
-    rows: number;
-  };
+  // Removed: grid property - no longer using grid layout
 };
 
 type ThemeMode = "light" | "dark";
 
-function resolveCourseStatusKey(
-  course: CourseDetail,
-  hasUnmetPrereqs: boolean
-): StatusKey {
+function resolveCourseStatusKey(course: CourseDetail, hasUnmetPrereqs: boolean): StatusKey {
   if (hasUnmetPrereqs) return "blocked";
   if (course.status === "completed") return "completed";
   if (course.status === "failed") return "failed";
@@ -142,223 +117,18 @@ type HistoryEntry = {
   assignments: Record<string, string>;
 };
 
-type ContainerLayoutState = {
-  position: { x: number; y: number };
-  metrics: {
-    columns: number;
-    rows: number;
-    width: number;
-    height: number;
-  };
-  courseLayouts: Map<string, CourseLayout>;
-};
+// Removed: ContainerLayoutState and layOutCoursesInContainer - grid layout system removed
+// Courses now position freely, even within containers
 
-function layOutCoursesInContainer(
-  courseIds: string[],
-  containerPosition: { x: number; y: number },
-  initialMetrics?: {
-    columns: number;
-    rows: number;
-    width: number;
-    height: number;
-  }
-): ContainerLayoutState {
-  let position = snapPoint(containerPosition);
-  let metrics = initialMetrics ?? {
-    columns: 1,
-    rows: 1,
-    width: containerSizeForGrid(1, 1).width,
-    height: containerSizeForGrid(1, 1).height,
-  };
-
-  let layouts: CourseLayout[] = [];
-
-  courseIds.forEach((courseId) => {
-    const occupied = collectSlotSet(layouts);
-    let slot = findFirstAvailableSlot(occupied, metrics);
-
-    if (!slot) {
-      const edge = pickLeastPopulatedEdge(layouts, metrics);
-      const expansion = expandContainerLayouts(edge, position, metrics, layouts);
-      metrics = expansion.metrics;
-      position = expansion.containerPosition;
-      layouts = expansion.layouts;
-      slot = expansion.slotForNewCourse;
-    }
-
-    const absolutePosition = slotToPosition(position, slot);
-    layouts = [...layouts, { id: courseId, slot, position: absolutePosition }];
-  });
-
-  if (layouts.length > 0) {
-    const rowValues = layouts.map((layout) => layout.slot.row);
-    const columnValues = layouts.map((layout) => layout.slot.column);
-    const minRow = Math.min(...rowValues);
-    const minColumn = Math.min(...columnValues);
-    if (minColumn > 0 || minRow > 0) {
-      position = snapPoint({
-        x: position.x + minColumn * SLOT_HORIZONTAL_SPACING,
-        y: position.y + minRow * SLOT_VERTICAL_SPACING,
-      });
-      layouts = layouts.map((layout) => {
-        const slot: Slot = {
-          row: layout.slot.row - minRow,
-          column: layout.slot.column - minColumn,
-        };
-        return {
-          id: layout.id,
-          slot,
-          position: slotToPosition(position, slot),
-        };
-      });
-    } else {
-      layouts = layouts.map((layout) => ({
-        id: layout.id,
-        slot: layout.slot,
-        position: slotToPosition(position, layout.slot),
-      }));
-    }
-  }
-
-  const finalMetrics = metricsFromLayouts(layouts);
-  const courseLayouts = new Map<string, CourseLayout>();
-  layouts.forEach((layout) => {
-    courseLayouts.set(layout.id, {
-      id: layout.id,
-      slot: layout.slot,
-      position: layout.position,
-    });
-  });
-
-  return {
-    position,
-    metrics: finalMetrics,
-    courseLayouts,
-  };
-}
-
-function gatherAssignedCourseIds(
-  assignments: Record<string, string>,
-  containerId: string,
-  courseOrderIndex: Map<string, number>
-): string[] {
-  return Object.entries(assignments)
-    .filter(([, targetId]) => targetId === containerId)
-    .map(([courseId]) => courseId)
-    .sort(
-      (a, b) => (courseOrderIndex.get(a) ?? 0) - (courseOrderIndex.get(b) ?? 0)
-    );
-}
-
-function reflowContainerNodes(
-  nodes: Node<EditorNodeData>[],
-  containerId: string,
-  assignments: Record<string, string>,
-  courseOrderIndex: Map<string, number>,
-  debug: boolean = false
-): Node<EditorNodeData>[] {
-  const containerIndex = nodes.findIndex(
-    (node) => node.id === containerId && node.type === "container"
-  );
-  if (containerIndex === -1) return nodes;
-  const containerNode = nodes[containerIndex] as Node<ContainerNodeData>;
-
-  const assignedCourseIds = gatherAssignedCourseIds(
-    assignments,
-    containerId,
-    courseOrderIndex
-  );
-
-  const initialMetrics = containerNode.data.grid
-    ? {
-      columns: containerNode.data.grid.columns,
-      rows: containerNode.data.grid.rows,
-      width: (containerNode.style?.width as number) ?? containerNode.data.container.width,
-      height:
-        (containerNode.style?.height as number) ?? containerNode.data.container.height,
-    }
-    : undefined;
-
-  const layoutState = layOutCoursesInContainer(
-    assignedCourseIds,
-    containerNode.position,
-    initialMetrics
-  );
-
-  if (import.meta.env?.DEV && debug) {
-    console.debug("[grid debug] container", containerId, {
-      assignedCourseIds,
-      position: layoutState.position,
-      metrics: layoutState.metrics,
-    });
-  }
-
-  const updatedContainer: Node<ContainerNodeData> = {
-    ...containerNode,
-    position: layoutState.position,
-    data: {
-      ...containerNode.data,
-      container: {
-        ...containerNode.data.container,
-        position: layoutState.position,
-        width: layoutState.metrics.width,
-        height: layoutState.metrics.height,
-      },
-      courseCount: assignedCourseIds.length,
-      grid: {
-        columns: layoutState.metrics.columns,
-        rows: layoutState.metrics.rows,
-      },
-    },
-    style: {
-      ...containerNode.style,
-      width: layoutState.metrics.width,
-      height: layoutState.metrics.height,
-    },
-  };
-
-  const result = [...nodes];
-  result[containerIndex] = updatedContainer;
-
-  assignedCourseIds.forEach((courseId) => {
-    const courseIndex = result.findIndex((node) => node.id === courseId);
-    if (courseIndex === -1) return;
-    const courseNode = result[courseIndex] as Node<CourseNodeData>;
-    const layout = layoutState.courseLayouts.get(courseId);
-    if (!layout) return;
-    const relativePosition = {
-      x: layout.position.x - layoutState.position.x,
-      y: layout.position.y - layoutState.position.y,
-    };
-    result[courseIndex] = {
-      ...courseNode,
-      position: relativePosition,
-      positionAbsolute: layout.position,
-      parentNode: containerId,
-      extent: "parent",
-      data: {
-        ...courseNode.data,
-        course: {
-          ...courseNode.data.course,
-          position_x: layout.position.x,
-          position_y: layout.position.y,
-        },
-      },
-    } satisfies Node<CourseNodeData>;
-  });
-
-  return result;
-}
+// Removed: gatherAssignedCourseIds - no longer needed without reflow system
 
 function parkCourseOutsideContainer(
   containerNode: Node<ContainerNodeData>,
   coursePosition: { x: number; y: number }
 ): { x: number; y: number } {
   const containerPosition = snapPoint(containerNode.position);
-  const width =
-    (containerNode.style?.width as number) ?? containerNode.data.container.width;
-  const height =
-    (containerNode.style?.height as number) ?? containerNode.data.container.height;
+  const width = (containerNode.style?.width as number) ?? containerNode.data.container.width;
+  const height = (containerNode.style?.height as number) ?? containerNode.data.container.height;
 
   const left = containerPosition.x;
   const right = containerPosition.x + width;
@@ -375,9 +145,7 @@ function parkCourseOutsideContainer(
     bottom: Math.abs(bottom - courseCenterY),
   } as const;
 
-  const entries = Object.entries(distances) as Array<
-    ["left" | "right" | "top" | "bottom", number]
-  >;
+  const entries = Object.entries(distances) as Array<["left" | "right" | "top" | "bottom", number]>;
   const [edge] = entries.sort((a, b) => a[1] - b[1])[0] ?? ["right", 0];
   const offset = GRID_CONFIG.UNIT;
 
@@ -428,10 +196,7 @@ const DEFAULT_CONTAINER_FALLBACK = {
   },
 };
 
-const ACCENT_COLORS: Record<ThemeMode, string> = {
-  light: "#2563eb",
-  dark: "#60a5fa",
-};
+// Removed: ACCENT_COLORS - unused
 
 function withAlpha(color: string, alpha: number): string {
   const trimmed = color.trim().toLowerCase();
@@ -451,7 +216,8 @@ function withAlpha(color: string, alpha: number): string {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
   if (trimmed.startsWith("#")) {
-    const hex = trimmed.length === 4 ? trimmed.replace(/./g, (c) => (c === "#" ? "#" : `${c}${c}`)) : trimmed;
+    const hex =
+      trimmed.length === 4 ? trimmed.replace(/./g, (c) => (c === "#" ? "#" : `${c}${c}`)) : trimmed;
     const bigint = Number.parseInt(hex.slice(1), 16);
     const r = (bigint >> 16) & 255;
     const g = (bigint >> 8) & 255;
@@ -473,29 +239,29 @@ function resolveContainerVisuals(
   if (paletteEntry) {
     return theme === "dark"
       ? {
-        fill: paletteEntry.dark.fill,
-        border: paletteEntry.dark.border,
-        shadow: CONTAINER_NODE_SHADOW.dark,
-      }
+          fill: paletteEntry.dark.fill,
+          border: paletteEntry.dark.border,
+          shadow: CONTAINER_NODE_SHADOW.dark,
+        }
       : {
-        fill: paletteEntry.light.fill,
-        border: paletteEntry.light.border,
-        shadow: CONTAINER_NODE_SHADOW.light,
-      };
+          fill: paletteEntry.light.fill,
+          border: paletteEntry.light.border,
+          shadow: CONTAINER_NODE_SHADOW.light,
+        };
   }
   const fallbackFill = container.color;
   if (fallbackFill) {
     return theme === "dark"
       ? {
-        fill: fallbackFill,
-        border: DEFAULT_CONTAINER_FALLBACK.dark.border,
-        shadow: DEFAULT_CONTAINER_FALLBACK.dark.shadow,
-      }
+          fill: fallbackFill,
+          border: DEFAULT_CONTAINER_FALLBACK.dark.border,
+          shadow: DEFAULT_CONTAINER_FALLBACK.dark.shadow,
+        }
       : {
-        fill: fallbackFill,
-        border: DEFAULT_CONTAINER_FALLBACK.light.border,
-        shadow: DEFAULT_CONTAINER_FALLBACK.light.shadow,
-      };
+          fill: fallbackFill,
+          border: DEFAULT_CONTAINER_FALLBACK.light.border,
+          shadow: DEFAULT_CONTAINER_FALLBACK.light.shadow,
+        };
   }
   return theme === "dark" ? DEFAULT_CONTAINER_FALLBACK.dark : DEFAULT_CONTAINER_FALLBACK.light;
 }
@@ -513,11 +279,12 @@ type CourseNodeProps = NodeProps<CourseNodeData>;
 function CourseNode({ data }: CourseNodeProps) {
   const { course, hasUnmetPrereqs, onSelect } = data;
 
-  const displayStatus = course.status.charAt(0).toUpperCase() + course.status.slice(1).replace("_", " ");
+  const displayStatus =
+    course.status.charAt(0).toUpperCase() + course.status.slice(1).replace("_", " ");
   const statusClassName = `status status--${course.status.replace("_", "-")}`;
   const nodeClassName = `course-node status-${course.status}${hasUnmetPrereqs ? " course-node--blocked" : ""}`;
   const gradeBadge = course.grade ? Number(course.grade).toFixed(0) : null;
-  
+
   // Determine grade tier for styling
   let gradeTier = "";
   let gradeNum = 0;
@@ -527,7 +294,8 @@ function CourseNode({ data }: CourseNodeProps) {
       gradeTier = "grade-gold";
     } else if (gradeNum >= 70) {
       gradeTier = "grade-silver";
-    } else if (gradeNum >= 55) { // Assuming 55 is pass threshold
+    } else if (gradeNum >= 55) {
+      // Assuming 55 is pass threshold
       gradeTier = "grade-bronze";
     } else {
       gradeTier = "grade-fail";
@@ -601,19 +369,14 @@ type ContainerNodeProps = NodeProps<ContainerNodeData>;
 
 function ContainerNode({ data, selected }: ContainerNodeProps) {
   const { container, onSelect, courseCount } = data;
-  
+
   // Use palette_id to determine the tone/color variant
   const tone = container.palette_id || "indigo"; // Default to indigo if no palette selected
   const toneClassName = `container-node tone-${tone}${selected ? " is-selected" : ""}`;
 
   return (
     <div className={toneClassName} onDoubleClick={() => onSelect(container.id)}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="in"
-        style={{ opacity: 0.6, top: 20 }}
-      />
+      <Handle type="target" position={Position.Left} id="in" style={{ opacity: 0.6, top: 20 }} />
       <div className="container-node__header">
         <span className="container-node__title" title={container.title}>
           {container.title}
@@ -625,12 +388,7 @@ function ContainerNode({ data, selected }: ContainerNodeProps) {
       <div className="container-node__body">
         {/* Course nodes are rendered as children by React Flow */}
       </div>
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="out"
-        style={{ opacity: 0.6, top: 20 }}
-      />
+      <Handle type="source" position={Position.Right} id="out" style={{ opacity: 0.6, top: 20 }} />
     </div>
   );
 }
@@ -702,11 +460,6 @@ function GraphEditorPageInner() {
 
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState<EditorNodeData>([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
-  const {
-    handleNodeDrag: detectNodeDrag,
-    handleNodeDragStop: detectNodeDragStop,
-    handleNodeDragStart: detectNodeDragStart,
-  } = useCollisionDetection(nodes);
 
   const initialViewportIsLarge =
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 1024px)").matches;
@@ -723,11 +476,12 @@ function GraphEditorPageInner() {
   const [gridStyle, setGridStyle] = useState<"dots" | "lines">("dots");
   const [gridDotSize, setGridDotSize] = useState(1);
   const [gridLineWidth, setGridLineWidth] = useState(1);
+  const [nodeBlur, setNodeBlur] = useState(8);
   const {
     courses: selectedCourseIds,
     containers: selectedContainerIds,
     edges: selectedEdgeIds,
-    detailTarget,
+    // detailTarget, // Unused after removing collision system
     isDetailOpen,
     totals: selectionTotals,
     lastClicked: lastClickedTarget,
@@ -753,10 +507,10 @@ function GraphEditorPageInner() {
 
   const updateGraphCache = useCallback(
     (updater: (draft: GraphDetail) => void) => {
-      if (!graphId) return () => { };
+      if (!graphId) return () => {};
       const key = ["graph", graphId] as const;
       const previous = queryClient.getQueryData<GraphDetail>(key);
-      if (!previous) return () => { };
+      if (!previous) return () => {};
       const draft = cloneGraphDetail(previous);
       updater(draft);
       queryClient.setQueryData(key, draft);
@@ -765,21 +519,16 @@ function GraphEditorPageInner() {
     [graphId, queryClient]
   );
 
-  const enqueueGraphMutation = useCallback(
-    (task: () => Promise<void>) => {
-      graphMutationQueueRef.current = graphMutationQueueRef.current
-        .catch(() => undefined)
-        .then(task);
-      return graphMutationQueueRef.current.then(
-        () => undefined,
-        (error) => {
-          console.error("Graph mutation failed", error);
-          throw error;
-        }
-      );
-    },
-    []
-  );
+  const enqueueGraphMutation = useCallback((task: () => Promise<void>) => {
+    graphMutationQueueRef.current = graphMutationQueueRef.current.catch(() => undefined).then(task);
+    return graphMutationQueueRef.current.then(
+      () => undefined,
+      (error) => {
+        console.error("Graph mutation failed", error);
+        throw error;
+      }
+    );
+  }, []);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -793,6 +542,8 @@ function GraphEditorPageInner() {
     assignmentsRef.current = courseAssignments;
   }, [courseAssignments]);
 
+  // courseOrderIndex - no longer needed without reflow system
+  /*
   const courseOrderIndex = useMemo(() => {
     const map = new Map<string, number>();
     (detailQuery.data?.courses ?? []).forEach((course, index) => {
@@ -800,6 +551,7 @@ function GraphEditorPageInner() {
     });
     return map;
   }, [detailQuery.data?.courses]);
+  */
 
   const courseDetailMap = useMemo(() => {
     const map = new Map<string, CourseDetail>();
@@ -814,35 +566,32 @@ function GraphEditorPageInner() {
       nodes: Node<EditorNodeData>[],
       courseId: string,
       previousParent: string | null,
-      nextParent: string | null,
-      assignments: Record<string, string>
+      nextParent: string | null
+      // assignments: Record<string, string> // Unused after removing reflow
     ) => {
-      let updated = [...nodes];
+      const updated = [...nodes];
       const courseIndex = updated.findIndex((node) => node.id === courseId);
       if (courseIndex === -1) return updated;
 
       const originalCourseNode = updated[courseIndex] as Node<CourseNodeData>;
-      const courseDetail =
-        courseDetailMap.get(courseId) ?? originalCourseNode.data.course;
+      const courseDetail = courseDetailMap.get(courseId) ?? originalCourseNode.data.course;
 
       const findContainerNode = (id: string | null) =>
         id
-          ? (updated.find((node) => node.id === id) as
-            | Node<ContainerNodeData>
-            | undefined)
+          ? (updated.find((node) => node.id === id) as Node<ContainerNodeData> | undefined)
           : undefined;
 
       const previousContainerNode = findContainerNode(previousParent);
       const absoluteBefore =
         previousParent && previousContainerNode
           ? snapPoint({
-            x: previousContainerNode.position.x + originalCourseNode.position.x,
-            y: previousContainerNode.position.y + originalCourseNode.position.y,
-          })
+              x: previousContainerNode.position.x + originalCourseNode.position.x,
+              y: previousContainerNode.position.y + originalCourseNode.position.y,
+            })
           : snapPoint({
-            x: originalCourseNode.position.x,
-            y: originalCourseNode.position.y,
-          });
+              x: originalCourseNode.position.x,
+              y: originalCourseNode.position.y,
+            });
 
       let courseNode: Node<CourseNodeData> = { ...originalCourseNode };
 
@@ -869,35 +618,15 @@ function GraphEditorPageInner() {
         courseNode = {
           ...courseNode,
           parentNode: nextParent,
-          extent: "parent",
+          // Removed: extent: "parent" - allows free positioning even within containers
         } satisfies Node<CourseNodeData>;
       }
 
       updated[courseIndex] = courseNode;
 
-      if (previousParent) {
-        updated = reflowContainerNodes(
-          updated,
-          previousParent,
-          assignments,
-          courseOrderIndex,
-          false
-        );
-      }
-
-      if (nextParent) {
-        updated = reflowContainerNodes(
-          updated,
-          nextParent,
-          assignments,
-          courseOrderIndex,
-          false
-        );
-      }
-
       return updated;
     },
-    [courseDetailMap, courseOrderIndex]
+    [courseDetailMap]
   );
 
   useEffect(() => {
@@ -1005,7 +734,13 @@ function GraphEditorPageInner() {
         throw error;
       }
     });
-  }, [enqueueGraphMutation, graphId, serializeContainersFromNodes, updateGraphCache, updateGraphMutation]);
+  }, [
+    enqueueGraphMutation,
+    graphId,
+    serializeContainersFromNodes,
+    updateGraphCache,
+    updateGraphMutation,
+  ]);
 
   const scheduleContainerPersistence = useCallback(() => {
     if (containerPersistTimeoutRef.current !== null) {
@@ -1126,83 +861,62 @@ function GraphEditorPageInner() {
     }
 
     const dataTimestamp = detailQuery.dataUpdatedAt ?? Date.now();
-    if (
-      lastDetailTimestampRef.current === dataTimestamp &&
-      nodesRef.current.length > 0
-    ) {
+    if (lastDetailTimestampRef.current === dataTimestamp && nodesRef.current.length > 0) {
       return;
     }
     lastDetailTimestampRef.current = dataTimestamp;
 
     const remoteAssignments = detail.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
-    
+
     // Build a set of valid container IDs to sanitize assignments
-    const validContainerIds = new Set(detail.graph.containers.map(c => c.id));
-    
+    const validContainerIds = new Set(detail.graph.containers.map((c) => c.id));
+
     // Sanitize assignments: remove any assignments to non-existent containers
     const sanitizedAssignments: Record<string, string> = {};
     for (const [courseId, containerId] of Object.entries(remoteAssignments)) {
       if (validContainerIds.has(containerId)) {
         sanitizedAssignments[courseId] = containerId;
       } else {
-        console.warn(`Course ${courseId} is assigned to non-existent container ${containerId}, removing assignment`);
+        console.warn(
+          `Course ${courseId} is assigned to non-existent container ${containerId}, removing assignment`
+        );
       }
     }
-    
+
     setCourseAssignments(sanitizedAssignments);
     assignmentsRef.current = sanitizedAssignments;
-    
+
     // If we cleaned up any assignments, persist the sanitized version
     if (Object.keys(remoteAssignments).length !== Object.keys(sanitizedAssignments).length) {
       void persistAssignmentsSafe(sanitizedAssignments);
     }
 
-    const courseOrderIndex = new Map(
-      detail.courses.map((course, index) => [course.id, index])
-    );
+    const courseOrderIndex = new Map(detail.courses.map((course, index) => [course.id, index]));
 
-    const containerLayouts = new Map<string, ContainerLayoutState>();
+    // Simplified: No grid layout, containers just use their stored dimensions and positions
+    const containerNodes: Node<ContainerNodeData>[] = detail.graph.containers.map((container) => {
+      const position = snapPoint({
+        x: Number.isFinite(container.position?.x) ? container.position.x : 0,
+        y: Number.isFinite(container.position?.y) ? container.position.y : 0,
+      });
 
-    const containerNodes: Node<ContainerNodeData>[] = detail.graph.containers.map(
-      (container) => {
-        const basePosition = snapPoint({
-          x: Number.isFinite(container.position?.x) ? container.position.x : 0,
-          y: Number.isFinite(container.position?.y) ? container.position.y : 0,
-        });
+      const assignedCourseIds = detail.courses
+        .filter((course) => sanitizedAssignments[course.id] === container.id)
+        .sort((a, b) => (courseOrderIndex.get(a.id) ?? 0) - (courseOrderIndex.get(b.id) ?? 0))
+        .map((course) => course.id);
 
-        const assignedCourseIds = detail.courses
-          .filter((course) => sanitizedAssignments[course.id] === container.id)
-          .sort(
-            (a, b) =>
-              (courseOrderIndex.get(a.id) ?? 0) -
-              (courseOrderIndex.get(b.id) ?? 0)
-          )
-          .map((course) => course.id);
-
-        const initialMetrics =
-          container.width && container.height
-            ? deriveMetricsFromSize({
-              width: container.width,
-              height: container.height,
-            })
-            : undefined;
-
-        const layoutState = layOutCoursesInContainer(
-          assignedCourseIds,
-          basePosition,
-          initialMetrics
-        );
-
-        containerLayouts.set(container.id, layoutState);
+      // Use stored dimensions or defaults
+      const width = container.width ?? 400;
+      const height = container.height ?? 300;
 
       const normalized: ContainerShape = {
         id: container.id,
         title: container.title,
         palette_id: container.palette_id ?? null,
         color: container.color,
-        width: layoutState.metrics.width,
-        height: layoutState.metrics.height,
-        position: layoutState.position,
+        width,
+        height,
+        position,
       };
 
       const isSelected = selectedContainerIds.includes(normalized.id);
@@ -1215,10 +929,7 @@ function GraphEditorPageInner() {
           container: normalized,
           onSelect: openInspectorForContainer,
           courseCount: assignedCourseIds.length,
-          grid: {
-            columns: layoutState.metrics.columns,
-            rows: layoutState.metrics.rows,
-          },
+          // Removed grid data - no longer using grid layout
         },
         style: {
           width: normalized.width,
@@ -1243,18 +954,17 @@ function GraphEditorPageInner() {
 
       const isSelected = selectedCourseIds.includes(course.id);
 
-      // Validate that the parent container actually exists before treating this as a child node
+      // Simplified: courses use their stored positions, whether inside or outside containers
+      // If they have a parent, we still track it, but don't restrict positioning
       if (parent && containerNodeMap.has(parent)) {
-        const layoutState = containerLayouts.get(parent);
-        const containerNode = containerNodeMap.get(parent);
-        const layout = layoutState?.courseLayouts.get(course.id);
-        const containerPosition =
-          layoutState?.position ?? containerNode?.position ?? snapPoint({ x: 0, y: 0 });
-        const absolutePosition =
-          layout?.position ?? slotToPosition(containerPosition, { row: 0, column: 0 });
+        const containerNode = containerNodeMap.get(parent)!;
+        const absolutePosition = snapPoint({
+          x: Number.isFinite(course.position_x) ? course.position_x : containerNode.position.x + 50,
+          y: Number.isFinite(course.position_y) ? course.position_y : containerNode.position.y + 100,
+        });
         const relativePosition = {
-          x: absolutePosition.x - containerPosition.x,
-          y: absolutePosition.y - containerPosition.y,
+          x: absolutePosition.x - containerNode.position.x,
+          y: absolutePosition.y - containerNode.position.y,
         };
         return {
           id: course.id,
@@ -1268,8 +978,8 @@ function GraphEditorPageInner() {
             onSelect: openInspectorForCourse,
           },
           parentNode: parent,
-          extent: "parent",
-          expandParent: true,
+          // Removed: extent: "parent" - allows free positioning even within containers
+          // Removed: expandParent - no auto-resizing of containers
           style: { zIndex: 1 },
           draggable: true,
           selectable: true,
@@ -1345,18 +1055,9 @@ function GraphEditorPageInner() {
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       onNodesChangeInternal(changes);
-      const affectsContainer = changes.some(
-        (change) =>
-          change.type === "dimensions" &&
-          nodesRef.current.some(
-            (candidate) => candidate.id === change.id && candidate.type === "container"
-          )
-      );
-      if (affectsContainer) {
-        scheduleContainerPersistence();
-      }
+      // Removed: dimension change detection and auto-persist for containers
     },
-    [onNodesChangeInternal, scheduleContainerPersistence]
+    [onNodesChangeInternal]
   );
 
   const handleEdgesChange = useCallback(
@@ -1436,19 +1137,13 @@ function GraphEditorPageInner() {
     [persistAssignmentsSafe, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
   );
 
-  const handleNodeDrag = useCallback(
-    (_event: unknown, node: Node<EditorNodeData>) => {
-      detectNodeDrag(node.id, node.position);
-    },
-    [detectNodeDrag]
-  );
+  const handleNodeDrag = useCallback((_event: unknown, _node: Node<EditorNodeData>) => {
+    // No collision detection - allow free dragging
+  }, []);
 
-  const handleNodeDragStart = useCallback(
-    () => {
-      detectNodeDragStart();
-    },
-    [detectNodeDragStart]
-  );
+  const handleNodeDragStart = useCallback(() => {
+    // No collision detection - allow free dragging
+  }, []);
 
   const handleNodeDragStop = useCallback(
     (_: unknown, node: Node<EditorNodeData>) => {
@@ -1473,13 +1168,7 @@ function GraphEditorPageInner() {
               },
             } satisfies Node<ContainerNodeData>;
           }
-          return reflowContainerNodes(
-            adjusted,
-            node.id,
-            assignmentsRef.current,
-            courseOrderIndex,
-            false
-          );
+          return adjusted;
         });
         scheduleContainerPersistence();
         pushHistory();
@@ -1487,23 +1176,11 @@ function GraphEditorPageInner() {
       }
 
       if (node.type === "course") {
-        const parentId = (node as unknown as { parentNode?: string }).parentNode ?? null;
-        if (parentId) {
-          setNodes((prev) =>
-            reflowContainerNodes(
-              prev,
-              parentId,
-              assignmentsRef.current,
-              courseOrderIndex,
-              false
-            )
-          );
-        } else {
-          const snapped = snapPoint(node.position);
-          setNodes((prev) =>
-            prev.map((candidate) =>
-              candidate.id === node.id && candidate.type === "course"
-                ? ({
+        const snapped = snapPoint(node.position);
+        setNodes((prev) =>
+          prev.map((candidate) =>
+            candidate.id === node.id && candidate.type === "course"
+              ? ({
                   ...candidate,
                   position: snapped,
                   data: {
@@ -1515,15 +1192,14 @@ function GraphEditorPageInner() {
                     },
                   },
                 } as Node<CourseNodeData>)
-                : candidate
-            )
-          );
-          void enqueueCoursePositionUpdate(node.id, snapped);
-        }
+              : candidate
+          )
+        );
+        void enqueueCoursePositionUpdate(node.id, snapped);
         pushHistory();
       }
     },
-    [courseOrderIndex, enqueueCoursePositionUpdate, pushHistory, scheduleContainerPersistence, setNodes]
+    [enqueueCoursePositionUpdate, pushHistory, scheduleContainerPersistence, setNodes]
   );
 
   const handleNodeClick = useCallback(
@@ -1550,7 +1226,11 @@ function GraphEditorPageInner() {
         return;
       }
 
-      if (lastClickedTarget && lastClickedTarget.type === type && lastClickedTarget.id === node.id) {
+      if (
+        lastClickedTarget &&
+        lastClickedTarget.type === type &&
+        lastClickedTarget.id === node.id
+      ) {
         toggleSelectionDetail(type, node.id);
       } else {
         rememberClick(type, node.id);
@@ -1638,13 +1318,7 @@ function GraphEditorPageInner() {
         void persistAssignmentsSafe(nextAssignments);
 
         setNodes((prevNodes) =>
-          reflowAfterAssignment(
-            prevNodes,
-            courseId,
-            previousParent,
-            nextParent,
-            nextAssignments
-          )
+          reflowAfterAssignment(prevNodes, courseId, previousParent, nextParent)
         );
 
         setTimeout(() => {
@@ -1663,18 +1337,21 @@ function GraphEditorPageInner() {
     const existingContainers = nodesRef.current.filter((node) => node.type === "container");
     const nextIndex = existingContainers.length + 1;
     const palette = CONTAINER_PALETTE[Math.floor(Math.random() * CONTAINER_PALETTE.length)];
+    
+    // Simplified: just offset new containers by a fixed amount
     const basePosition = snapPoint({
-      x: existingContainers.length * SLOT_HORIZONTAL_SPACING,
-      y: existingContainers.length * SLOT_VERTICAL_SPACING,
+      x: existingContainers.length * 500,
+      y: existingContainers.length * 400,
     });
-    const baseMetrics = containerSizeForGrid(1, 1);
+    
+    // Use default container size
     const container: ContainerShape = {
       id: newId,
       title: `Group ${nextIndex}`,
       palette_id: palette.id,
       color: palette.light.fill,
-      width: baseMetrics.width,
-      height: baseMetrics.height,
+      width: 400,
+      height: 300,
       position: basePosition,
     };
     setNodes((nds) => [
@@ -1977,7 +1654,14 @@ function GraphEditorPageInner() {
       courseAssignments,
       containers: containerMap,
     });
-  }, [allCourses, courseAssignments, isMultiSelection, nodes, selectedContainerIds, selectedCourseIds]);
+  }, [
+    allCourses,
+    courseAssignments,
+    isMultiSelection,
+    nodes,
+    selectedContainerIds,
+    selectedCourseIds,
+  ]);
 
   const containerOptions = useMemo(() => {
     return nodes
@@ -2042,37 +1726,35 @@ function GraphEditorPageInner() {
       </div>
     );
 
-  const inspectorContent = isMultiSelection
-    ? multiSelectionData
-      ? (
-        <MultiSelectionInspector
-          groups={multiSelectionData.groups}
-          ungroupedCourses={multiSelectionData.ungroupedCourses}
-          totals={selectionTotals}
-        />
-      )
-      : placeholderPanel
-    : selectedCourse
-      ? (
-        <CourseSidePanel
-          course={selectedCourse}
-          assignedContainerId={courseAssignments[selectedCourse.id]}
-          onChange={handleAssignContainer}
-          containerOptions={containerOptions}
-          onClose={closeInspector}
-        />
-      )
-      : selectedContainer
-        ? (
-          <ContainerSidePanel
-            container={selectedContainer}
-            members={containerMembers.get(selectedContainer.id) ?? []}
-            theme={theme}
-            onChange={handleUpdateContainer}
-            onClose={closeInspector}
-          />
-        )
-        : placeholderPanel;
+  const inspectorContent = isMultiSelection ? (
+    multiSelectionData ? (
+      <MultiSelectionInspector
+        groups={multiSelectionData.groups}
+        ungroupedCourses={multiSelectionData.ungroupedCourses}
+        totals={selectionTotals}
+      />
+    ) : (
+      placeholderPanel
+    )
+  ) : selectedCourse ? (
+    <CourseSidePanel
+      course={selectedCourse}
+      assignedContainerId={courseAssignments[selectedCourse.id]}
+      onChange={handleAssignContainer}
+      containerOptions={containerOptions}
+      onClose={closeInspector}
+    />
+  ) : selectedContainer ? (
+    <ContainerSidePanel
+      container={selectedContainer}
+      members={containerMembers.get(selectedContainer.id) ?? []}
+      theme={theme}
+      onChange={handleUpdateContainer}
+      onClose={closeInspector}
+    />
+  ) : (
+    placeholderPanel
+  );
 
   const workspaceClasses = "relative flex flex-1 min-h-[calc(100vh-8rem)] flex-col";
 
@@ -2164,49 +1846,48 @@ function GraphEditorPageInner() {
       </span>
     </div>
   );
-  const infoBubbleContent = hasSelection
-    ? isMultiSelection
-      ? (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-            Multiple selected
-          </p>
-          <h2 className="mt-3 text-xl font-semibold">
-            {selectionTotals.containerCount} {containerLabel} – {selectionTotals.courseCount} {courseLabel}
-          </h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Open the details surface to review this selection.
-          </p>
+  const infoBubbleContent = hasSelection ? (
+    isMultiSelection ? (
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+          Multiple selected
+        </p>
+        <h2 className="mt-3 text-xl font-semibold">
+          {selectionTotals.containerCount} {containerLabel} – {selectionTotals.courseCount}{" "}
+          {courseLabel}
+        </h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Open the details surface to review this selection.
+        </p>
+      </div>
+    ) : selectedCourse ? (
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+          Course selected
+        </p>
+        <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
+        <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+          <span>{selectedCourse.credits} credits</span>
+          <span>Status: {selectedCourse.status}</span>
         </div>
-      )
-      : selectedCourse
-        ? (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-              Course selected
-            </p>
-            <h2 className="mt-3 text-xl font-semibold">{selectedCourse.code}</h2>
-            <p className="mt-1 text-sm text-slate-400">{selectedCourse.title}</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-              <span>{selectedCourse.credits} credits</span>
-              <span>Status: {selectedCourse.status}</span>
-            </div>
-          </div>
-        )
-        : selectedContainer
-          ? (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
-                Container selected
-              </p>
-              <h2 className="mt-3 text-xl font-semibold">{selectedContainer.title}</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
-              </p>
-            </div>
-          )
-          : defaultInfoBubble
-    : defaultInfoBubble;
+      </div>
+    ) : selectedContainer ? (
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400">
+          Container selected
+        </p>
+        <h2 className="mt-3 text-xl font-semibold">{selectedContainer.title}</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          {selectedContainerMemberCount} course{selectedContainerMemberCount === 1 ? "" : "s"}
+        </p>
+      </div>
+    ) : (
+      defaultInfoBubble
+    )
+  ) : (
+    defaultInfoBubble
+  );
 
   const menuItems: Array<{ label: string; action: () => void; danger?: boolean }> = [];
   if (isMultiSelection) {
@@ -2419,7 +2100,14 @@ function GraphEditorPageInner() {
 
       <div className={workspaceClasses}>
         <div className="flex h-full flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-stretch lg:gap-8">
-          <div className="relative flex-1 min-h-[520px]">
+          <div
+            className="relative flex-1 min-h-[520px]"
+            style={
+              {
+                "--node-blur": `${nodeBlur}px`,
+              } as React.CSSProperties
+            }
+          >
             {detailQuery.isLoading && <Skeleton className="absolute inset-0" />}
             <ReactFlowProvider>
               <GraphEditorCanvas
@@ -2501,10 +2189,12 @@ function GraphEditorPageInner() {
                       <div className="space-y-5">
                         {/* Appearance Section */}
                         <div className="space-y-3">
-                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                          <div
+                            className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                          >
                             Appearance
                           </div>
-                          
+
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-2">
                               <span className="text-lg">🎨</span>
@@ -2579,11 +2269,15 @@ function GraphEditorPageInner() {
                         </div>
 
                         {/* Divider */}
-                        <div className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-300"}`} />
+                        <div
+                          className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-300"}`}
+                        />
 
                         {/* Features Section */}
                         <div className="space-y-3">
-                          <div className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}>
+                          <div
+                            className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                          >
                             Features
                           </div>
 
@@ -2612,14 +2306,18 @@ function GraphEditorPageInner() {
                       </div>
 
                       {/* Grid Thickness Controls */}
-                      <div className={`${
-                        theme === "dark"
-                          ? "bg-slate-800/40 border-slate-700/50"
-                          : "bg-white/60 border-slate-200"
-                      } backdrop-blur-sm rounded-xl p-5 border shadow-md`}>
-                        <h3 className={`text-sm font-semibold mb-4 ${
-                          theme === "dark" ? "text-slate-200" : "text-slate-800"
-                        }`}>
+                      <div
+                        className={`${
+                          theme === "dark"
+                            ? "bg-slate-800/40 border-slate-700/50"
+                            : "bg-white/60 border-slate-200"
+                        } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
+                      >
+                        <h3
+                          className={`text-sm font-semibold mb-4 ${
+                            theme === "dark" ? "text-slate-200" : "text-slate-800"
+                          }`}
+                        >
                           Grid Thickness
                         </h3>
                         <div className="space-y-4">
@@ -2631,11 +2329,13 @@ function GraphEditorPageInner() {
                                   <span>⚫</span>
                                   <span>Dot Size</span>
                                 </label>
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                  theme === "dark"
-                                    ? "bg-slate-700/50 text-slate-300"
-                                    : "bg-slate-200 text-slate-700"
-                                }`}>
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                    theme === "dark"
+                                      ? "bg-slate-700/50 text-slate-300"
+                                      : "bg-slate-200 text-slate-700"
+                                  }`}
+                                >
                                   {gridDotSize.toFixed(1)}px
                                 </span>
                               </div>
@@ -2648,9 +2348,10 @@ function GraphEditorPageInner() {
                                 onChange={(e) => setGridDotSize(parseFloat(e.target.value))}
                                 className="w-full h-2 rounded-lg appearance-none cursor-pointer"
                                 style={{
-                                  background: theme === "dark"
-                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
-                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)"
+                                  background:
+                                    theme === "dark"
+                                      ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                      : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
                                 }}
                               />
                             </div>
@@ -2664,11 +2365,13 @@ function GraphEditorPageInner() {
                                   <span>━</span>
                                   <span>Line Width</span>
                                 </label>
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                  theme === "dark"
-                                    ? "bg-slate-700/50 text-slate-300"
-                                    : "bg-slate-200 text-slate-700"
-                                }`}>
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                    theme === "dark"
+                                      ? "bg-slate-700/50 text-slate-300"
+                                      : "bg-slate-200 text-slate-700"
+                                  }`}
+                                >
                                   {gridLineWidth.toFixed(1)}px
                                 </span>
                               </div>
@@ -2681,13 +2384,66 @@ function GraphEditorPageInner() {
                                 onChange={(e) => setGridLineWidth(parseFloat(e.target.value))}
                                 className="w-full h-2 rounded-lg appearance-none cursor-pointer"
                                 style={{
-                                  background: theme === "dark"
-                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
-                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)"
+                                  background:
+                                    theme === "dark"
+                                      ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                      : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
                                 }}
                               />
                             </div>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Node Styling Controls */}
+                      <div
+                        className={`${
+                          theme === "dark"
+                            ? "bg-slate-800/40 border-slate-700/50"
+                            : "bg-white/60 border-slate-200"
+                        } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
+                      >
+                        <h3
+                          className={`text-sm font-semibold mb-4 ${
+                            theme === "dark" ? "text-slate-200" : "text-slate-800"
+                          }`}
+                        >
+                          Node Styling
+                        </h3>
+                        <div className="space-y-4">
+                          {/* Node Blur Slider */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium flex items-center gap-2">
+                                <span>🌫️</span>
+                                <span>Background Blur</span>
+                              </label>
+                              <span
+                                className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                  theme === "dark"
+                                    ? "bg-slate-700/50 text-slate-300"
+                                    : "bg-slate-200 text-slate-700"
+                                }`}
+                              >
+                                {nodeBlur}px
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="20"
+                              step="1"
+                              value={nodeBlur}
+                              onChange={(e) => setNodeBlur(parseInt(e.target.value))}
+                              className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                              style={{
+                                background:
+                                  theme === "dark"
+                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2717,14 +2473,16 @@ function GraphEditorPageInner() {
                             disabled={item.disabled}
                             className={`${graphActionItemClasses} ${
                               item.disabled ? "cursor-not-allowed opacity-40" : ""
-                            } ${
-                              index === 0 ? "" : ""
-                            }`}
+                            } ${index === 0 ? "" : ""}`}
                           >
                             <span className="flex items-center justify-between gap-3">
                               <span>{item.label}</span>
                               {!item.disabled && (
-                                <span className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}>→</span>
+                                <span
+                                  className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}
+                                >
+                                  →
+                                </span>
                               )}
                             </span>
                           </button>
@@ -2855,13 +2613,11 @@ function GraphEditorCanvas({
       width: 220,
       background: theme === "dark" ? "#1b2230" : "#ffffff",
       borderRadius: 6,
-      boxShadow: theme === "dark" 
-        ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
-        : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
-      border:
+      boxShadow:
         theme === "dark"
-          ? "1px solid rgba(255,255,255,0.06)"
-          : "1px solid rgba(0,0,0,0.08)",
+          ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
+          : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
+      border: theme === "dark" ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.08)",
       bottom: 16,
       left: 16,
     }),
@@ -2871,13 +2627,11 @@ function GraphEditorCanvas({
     () => ({
       background: theme === "dark" ? "#1b2230" : "#ffffff",
       borderRadius: 12,
-      boxShadow: theme === "dark"
-        ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
-        : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
-      border:
+      boxShadow:
         theme === "dark"
-          ? "1px solid rgba(255,255,255,0.06)"
-          : "1px solid rgba(0,0,0,0.08)",
+          ? "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset"
+          : "0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.05) inset",
+      border: theme === "dark" ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.08)",
     }),
     [theme]
   );
@@ -2929,7 +2683,9 @@ function GraphEditorCanvas({
   );
   const miniMapNodeClassName = useCallback(
     (node: Node<EditorNodeData>) =>
-      node.type === "container" ? "minimap-node minimap-node--container" : "minimap-node minimap-node--course",
+      node.type === "container"
+        ? "minimap-node minimap-node--container"
+        : "minimap-node minimap-node--course",
     []
   );
   const MiniMapNodeComponent = useMemo(() => {
@@ -2952,10 +2708,7 @@ function GraphEditorCanvas({
         strokeColor ||
         (isCourse ? themeTokens.minimap.courseStroke : themeTokens.minimap.containerStroke);
       const padding = Math.max(1, Math.min(width, height) * 0.08);
-      const headerHeight = Math.max(
-        2,
-        Math.min(height * 0.3, height - padding * 2 - 2)
-      );
+      const headerHeight = Math.max(2, Math.min(height * 0.3, height - padding * 2 - 2));
       const baseRect = (
         <rect
           width={width}
@@ -2966,18 +2719,12 @@ function GraphEditorCanvas({
           stroke={strokeFallback}
           strokeWidth={strokeWidth}
           className={className}
-          onClick={
-            onClick ? (event) => onClick(event, id) : undefined
-          }
+          onClick={onClick ? (event) => onClick(event, id) : undefined}
         />
       );
 
       if (!isCourse || width < 12 || height < 12) {
-        return (
-          <g transform={`translate(${x}, ${y})`}>
-            {baseRect}
-          </g>
-        );
+        return <g transform={`translate(${x}, ${y})`}>{baseRect}</g>;
       }
 
       const headerFill = withAlpha(strokeFallback, themeMode === "dark" ? 0.45 : 0.22);
@@ -3063,11 +2810,7 @@ function GraphEditorCanvas({
             style={miniMapStyle}
           />
         ) : null}
-        <Controls
-          position="bottom-right"
-          showInteractive={false}
-          style={controlsStyle}
-        />
+        <Controls position="bottom-right" showInteractive={false} style={controlsStyle} />
         {gridStyle === "dots" ? (
           <Background
             key="dots"
@@ -3128,13 +2871,13 @@ export function AddCourseDialog({ open, onClose, onSubmit, isSubmitting }: AddCo
 
   const handleChange =
     (field: keyof AddCourseFormState) =>
-      (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const value =
-          event.target.type === "checkbox"
-            ? (event.target as HTMLInputElement).checked
-            : event.target.value;
-        setFormState((prev) => ({ ...prev, [field]: value }));
-      };
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+      const value =
+        event.target.type === "checkbox"
+          ? (event.target as HTMLInputElement).checked
+          : event.target.value;
+      setFormState((prev) => ({ ...prev, [field]: value }));
+    };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3318,9 +3061,9 @@ function CourseSidePanel({
 
   const handleChange =
     (field: keyof typeof formState) =>
-      (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        setFormState((prev) => ({ ...prev, [field]: event.target.value }));
-      };
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+      setFormState((prev) => ({ ...prev, [field]: event.target.value }));
+    };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3529,8 +3272,8 @@ function MemberChip({ member }: MemberChipProps) {
     };
 
     checkOverflow();
-    window.addEventListener('resize', checkOverflow);
-    return () => window.removeEventListener('resize', checkOverflow);
+    window.addEventListener("resize", checkOverflow);
+    return () => window.removeEventListener("resize", checkOverflow);
   }, [member.title, member.code]);
 
   return (
@@ -3538,7 +3281,7 @@ function MemberChip({ member }: MemberChipProps) {
       <div className="flex-1 min-w-0 member-text-container">
         <div
           ref={titleRef}
-          className={`member-text-marquee font-semibold text-slate-700 dark:text-slate-200 ${titleOverflows ? 'is-overflowing' : ''}`}
+          className={`member-text-marquee font-semibold text-slate-700 dark:text-slate-200 ${titleOverflows ? "is-overflowing" : ""}`}
         >
           <span data-text={member.title}>{member.title}</span>
         </div>
@@ -3547,7 +3290,7 @@ function MemberChip({ member }: MemberChipProps) {
       <div className="flex-1 min-w-0 member-text-container text-right">
         <div
           ref={codeRef}
-          className={`member-text-marquee text-slate-600 dark:text-slate-300 ${codeOverflows ? 'is-overflowing' : ''}`}
+          className={`member-text-marquee text-slate-600 dark:text-slate-300 ${codeOverflows ? "is-overflowing" : ""}`}
         >
           <span data-text={member.code}>{member.code}</span>
         </div>
@@ -3637,10 +3380,11 @@ function ContainerSidePanel({
               key={entry.id}
               type="button"
               onClick={() => handlePaletteSelect(entry.id)}
-              className={`h-10 w-10 rounded-full border transition ${paletteId === entry.id
+              className={`h-10 w-10 rounded-full border transition ${
+                paletteId === entry.id
                   ? "border-brand ring-2 ring-brand/50"
                   : "border-slate-300 dark:border-slate-600"
-                }`}
+              }`}
               style={{
                 background: theme === "dark" ? entry.dark.fill : entry.light.fill,
                 boxShadow:
@@ -3676,9 +3420,7 @@ function ContainerSidePanel({
               backdropFilter: "blur(12px)",
             }}
           >
-            <span className="text-slate-700 dark:text-slate-200">
-              {title || "Untitled"}
-            </span>
+            <span className="text-slate-700 dark:text-slate-200">{title || "Untitled"}</span>
             <span
               className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide font-bold"
               style={{
@@ -3753,7 +3495,13 @@ function EligibilityList({ course }: EligibilityListProps) {
 }
 
 type MultiSelectionInspectorProps = {
-  groups: Array<{ id: string; title: string; isSelected: boolean; totalCourses: number; courses: CourseDetail[] }>;
+  groups: Array<{
+    id: string;
+    title: string;
+    isSelected: boolean;
+    totalCourses: number;
+    courses: CourseDetail[];
+  }>;
   ungroupedCourses: CourseDetail[];
   totals: {
     containerCount: number;
@@ -3761,7 +3509,11 @@ type MultiSelectionInspectorProps = {
   };
 };
 
-export function MultiSelectionInspector({ groups, ungroupedCourses, totals }: MultiSelectionInspectorProps) {
+export function MultiSelectionInspector({
+  groups,
+  ungroupedCourses,
+  totals,
+}: MultiSelectionInspectorProps) {
   const containerLabel = totals.containerCount === 1 ? "container" : "containers";
   const courseLabel = totals.courseCount === 1 ? "course" : "courses";
   const hasGroups = groups.length > 0;
@@ -3852,7 +3604,9 @@ export function MultiSelectionInspector({ groups, ungroupedCourses, totals }: Mu
                     <span className="font-medium text-slate-800 dark:text-slate-100">
                       {course.code}
                     </span>
-                    <span className="truncate text-slate-500 dark:text-slate-400">{course.title}</span>
+                    <span className="truncate text-slate-500 dark:text-slate-400">
+                      {course.title}
+                    </span>
                   </li>
                 ))}
               </ul>

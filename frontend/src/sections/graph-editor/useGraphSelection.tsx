@@ -89,7 +89,8 @@ function reducer(state: SelectionState, action: Action): SelectionState {
       const selectionContainsLastClicked =
         state.lastClicked &&
         ((state.lastClicked.type === "course" && nextCourses.includes(state.lastClicked.id)) ||
-          (state.lastClicked.type === "container" && nextContainers.includes(state.lastClicked.id)));
+          (state.lastClicked.type === "container" &&
+            nextContainers.includes(state.lastClicked.id)));
       const nextDetailTarget = stillContainsTarget ? currentTarget : null;
       const nextIsDetailOpen = stillContainsTarget ? state.isDetailOpen : false;
       const selectionChanged =
@@ -132,7 +133,8 @@ function reducer(state: SelectionState, action: Action): SelectionState {
     }
     case "toggle-detail": {
       const { type, id } = action.payload;
-      const sameTarget = state.detailTarget && state.detailTarget.type === type && state.detailTarget.id === id;
+      const sameTarget =
+        state.detailTarget && state.detailTarget.type === type && state.detailTarget.id === id;
       return {
         ...state,
         detailTarget: { type, id },

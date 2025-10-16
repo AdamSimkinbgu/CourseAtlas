@@ -65,6 +65,8 @@
 	min-width: 200px; 
 	max-width: 300px; 
 	transition: border-color .15s, box-shadow .15s; 
+	backdrop-filter: blur(var(--node-blur, 8px));
+	-webkit-backdrop-filter: blur(var(--node-blur, 8px));
 }
 
 .react-flow__node-course .course-node__header { 

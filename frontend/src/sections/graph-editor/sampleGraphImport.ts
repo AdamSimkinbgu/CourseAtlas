@@ -203,22 +203,15 @@ type ContainerSummary = {
   title?: string | null;
 };
 
-export function buildMultiSelectionSummary(
-  params: {
-    courses: CourseDetail[];
-    selectedCourseIds: string[];
-    selectedContainerIds: string[];
-    courseAssignments: Record<string, string>;
-    containers: Map<string, ContainerSummary>;
-  }
-): { groups: MultiSelectionGroup[]; ungroupedCourses: CourseDetail[] } {
-  const {
-    courses,
-    selectedCourseIds,
-    selectedContainerIds,
-    courseAssignments,
-    containers,
-  } = params;
+export function buildMultiSelectionSummary(params: {
+  courses: CourseDetail[];
+  selectedCourseIds: string[];
+  selectedContainerIds: string[];
+  courseAssignments: Record<string, string>;
+  containers: Map<string, ContainerSummary>;
+}): { groups: MultiSelectionGroup[]; ungroupedCourses: CourseDetail[] } {
+  const { courses, selectedCourseIds, selectedContainerIds, courseAssignments, containers } =
+    params;
 
   const selectedCourses = selectedCourseIds
     .map((id) => courses.find((course) => course.id === id))

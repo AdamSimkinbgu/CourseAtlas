@@ -49,10 +49,7 @@ export function normaliseLayouts(layouts: CourseLayout[]): CourseLayout[] {
 
 export function slotToPosition(containerPosition: GridPoint, slot: Slot): GridPoint {
   return snapPoint({
-    x:
-      containerPosition.x +
-      CONTAINER_PADDING +
-      slot.column * (COURSE_SLOT_WIDTH + COURSE_GAP),
+    x: containerPosition.x + CONTAINER_PADDING + slot.column * (COURSE_SLOT_WIDTH + COURSE_GAP),
     y:
       containerPosition.y +
       CONTAINER_PADDING +
@@ -61,32 +58,20 @@ export function slotToPosition(containerPosition: GridPoint, slot: Slot): GridPo
   });
 }
 
-export function positionToSlot(
-  containerPosition: GridPoint,
-  position: GridPoint
-): Slot {
+export function positionToSlot(containerPosition: GridPoint, position: GridPoint): Slot {
   const relativeX = position.x - (containerPosition.x + CONTAINER_PADDING);
   const relativeY =
-    position.y -
-    (containerPosition.y + CONTAINER_PADDING + CONTAINER_HEADER_HEIGHT);
+    position.y - (containerPosition.y + CONTAINER_PADDING + CONTAINER_HEADER_HEIGHT);
 
-  const column = Math.max(
-    0,
-    Math.round(relativeX / (COURSE_SLOT_WIDTH + COURSE_GAP))
-  );
-  const row = Math.max(
-    0,
-    Math.round(relativeY / (COURSE_SLOT_HEIGHT + COURSE_GAP))
-  );
+  const column = Math.max(0, Math.round(relativeX / (COURSE_SLOT_WIDTH + COURSE_GAP)));
+  const row = Math.max(0, Math.round(relativeY / (COURSE_SLOT_HEIGHT + COURSE_GAP)));
 
   return { column, row };
 }
 
 export function containerSizeForGrid(columns: number, rows: number): GridSize {
   const width =
-    CONTAINER_PADDING * 2 +
-    columns * COURSE_SLOT_WIDTH +
-    Math.max(0, columns - 1) * COURSE_GAP;
+    CONTAINER_PADDING * 2 + columns * COURSE_SLOT_WIDTH + Math.max(0, columns - 1) * COURSE_GAP;
   const height =
     CONTAINER_PADDING * 2 +
     CONTAINER_HEADER_HEIGHT +
@@ -122,20 +107,13 @@ function clampGridSize(value: number): number {
 }
 
 export function deriveMetricsFromSize(size: GridSize): ContainerGridMetrics {
-  const innerWidth = Math.max(
-    0,
-    size.width - CONTAINER_PADDING * 2 + COURSE_GAP
-  );
+  const innerWidth = Math.max(0, size.width - CONTAINER_PADDING * 2 + COURSE_GAP);
   const innerHeight = Math.max(
     0,
     size.height - (CONTAINER_PADDING * 2 + CONTAINER_HEADER_HEIGHT) + COURSE_GAP
   );
-  const columns = clampGridSize(
-    Math.round(innerWidth / (COURSE_SLOT_WIDTH + COURSE_GAP))
-  );
-  const rows = clampGridSize(
-    Math.round(innerHeight / (COURSE_SLOT_HEIGHT + COURSE_GAP))
-  );
+  const columns = clampGridSize(Math.round(innerWidth / (COURSE_SLOT_WIDTH + COURSE_GAP)));
+  const rows = clampGridSize(Math.round(innerHeight / (COURSE_SLOT_HEIGHT + COURSE_GAP)));
   const snapped = containerSizeForGrid(columns, rows);
   return {
     columns,
@@ -243,7 +221,7 @@ export function expandContainerLayouts(
   layouts: CourseLayout[]
 ): ExpansionOutcome {
   let { columns, rows } = metrics;
-  let newPosition = { ...containerPosition };
+  const newPosition = { ...containerPosition };
   let adjustedLayouts = layouts.map((layout) => ({ ...layout, slot: { ...layout.slot } }));
   let newSlot: Slot;
 

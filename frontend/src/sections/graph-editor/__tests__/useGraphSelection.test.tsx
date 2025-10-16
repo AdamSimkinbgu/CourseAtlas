@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
-import {
-  GraphSelectionProvider,
-  useGraphSelection,
-} from "../useGraphSelection";
+import { GraphSelectionProvider, useGraphSelection } from "../useGraphSelection";
 
 function wrapper({ children }: PropsWithChildren) {
   return <GraphSelectionProvider>{children}</GraphSelectionProvider>;

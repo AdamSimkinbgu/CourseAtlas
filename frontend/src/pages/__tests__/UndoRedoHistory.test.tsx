@@ -89,7 +89,10 @@ describe("Graph history undo/redo", () => {
     };
 
     const selectionSnapshot: Snapshot = {
-      nodes: [{ id: "course-1", selected: true }, { id: "course-2", selected: true }],
+      nodes: [
+        { id: "course-1", selected: true },
+        { id: "course-2", selected: true },
+      ],
       edges: [],
       assignments: { "course-1": "container-a" },
     };
