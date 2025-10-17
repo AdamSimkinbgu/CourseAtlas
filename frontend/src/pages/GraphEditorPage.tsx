@@ -23,6 +23,7 @@ import ReactFlow, {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   NodeProps,
   type MiniMapNodeProps,
   type Connection,
@@ -448,6 +449,9 @@ function GraphEditorPageInner() {
   const createCourseMutation = useCreateCourseMutation(graphId ?? "");
   const healthQuery = useHealthQuery();
 
+  // React Flow instance for incremental updates (#13)
+  // Note: Not using getNode/getNodes yet, but available for future optimizations
+  useReactFlow();
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -555,6 +559,15 @@ function GraphEditorPageInner() {
       });
     },
     [setNodes]
+  );
+
+  // Helper function for incremental node updates (#13)
+  // Updates a single node's data without rebuilding the entire graph
+  const updateSingleNode = useCallback(
+    (nodeId: string, updater: (node: Node<EditorNodeData>) => Node<EditorNodeData>) => {
+      updateNodesWithMap((prev) => prev.map((node) => (node.id === nodeId ? updater(node) : node)));
+    },
+    [updateNodesWithMap]
   );
 
   useEffect(() => {
@@ -972,10 +985,21 @@ function GraphEditorPageInner() {
     }
     lastDetailTimestampRef.current = dataTimestamp;
 
-    // OPTIMIZATION NOTE: This rebuilds ALL nodes whenever data changes
-    // Position updates are now handled separately and don't trigger cache updates,
-    // but other mutations (title, status, etc.) will still cause full rebuilds
-    // Future improvement: Use React Flow's updateNode() for incremental updates
+    // GRAPH REBUILD STRATEGY (#13):
+    // This effect rebuilds ALL nodes/edges when the cache timestamp changes.
+    //
+    // FULL REBUILDS occur for:
+    // - Initial data load
+    // - Import operations
+    // - Node add/delete (structural changes)
+    // - Assignment changes (course moved between containers)
+    // - Course updates via inspector (triggers cache update + rebuild)
+    //
+    // INCREMENTAL UPDATES (#13):
+    // - Course data updates (title, status, etc.) use updateSingleNode() for immediate feedback
+    // - The subsequent cache update will trigger this rebuild, but React reconciliation
+    //   prevents unnecessary DOM updates if the data is already correct
+    // - This ensures UI always matches cache while providing instant feedback
 
     const remoteAssignments = detail.graph.container_assignments ?? EMPTY_ASSIGNMENTS;
 
@@ -2097,6 +2121,7 @@ function GraphEditorPageInner() {
       onClose={closeInspector}
       loading={loading}
       updateGraphCache={updateGraphCache}
+      updateSingleNode={updateSingleNode}
     />
   ) : selectedContainer ? (
     <ContainerSidePanel
@@ -3399,6 +3424,10 @@ type CourseSidePanelProps = {
   onClose: () => void;
   loading: ReturnType<typeof useLoadingState>;
   updateGraphCache: (updater: (draft: GraphDetail) => void) => () => void;
+  updateSingleNode: (
+    nodeId: string,
+    updater: (node: Node<EditorNodeData>) => Node<EditorNodeData>
+  ) => void;
 };
 
 function CourseSidePanel({
@@ -3409,6 +3438,7 @@ function CourseSidePanel({
   onClose,
   loading,
   updateGraphCache,
+  updateSingleNode,
 }: CourseSidePanelProps) {
   const { graphId } = useParams<{ graphId: string }>();
   const updateCourseMutation = useUpdateCourseMutation(graphId ?? "");
@@ -3487,6 +3517,35 @@ function CourseSidePanel({
               : draft.courses[courseIndex].credits,
         };
       }
+    });
+
+    // Incremental update: Update the node directly without full rebuild (#13)
+    const updatedCourseData = {
+      ...course,
+      title: formState.title,
+      code: formState.code,
+      term: formState.term || null,
+      status: formState.status,
+      notes: formState.notes || null,
+      is_pass_fail: formState.is_pass_fail,
+      grade: formState.grade ? formState.grade : null,
+      credits:
+        Number.isFinite(creditsValue) && creditsValue >= 0
+          ? Math.round(creditsValue)
+          : course.credits,
+    };
+
+    updateSingleNode(course.id, (node) => {
+      if (node.data.kind === "course") {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            course: updatedCourseData,
+          },
+        };
+      }
+      return node;
     });
 
     try {
