@@ -23,7 +23,6 @@ import ReactFlow, {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
-  useReactFlow,
   NodeProps,
   type MiniMapNodeProps,
   type Connection,
@@ -449,9 +448,6 @@ function GraphEditorPageInner() {
   const createCourseMutation = useCreateCourseMutation(graphId ?? "");
   const healthQuery = useHealthQuery();
 
-  // React Flow instance for incremental updates (#13)
-  // Note: Not using getNode/getNodes yet, but available for future optimizations
-  useReactFlow();
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
 
   const [theme, setTheme] = useState<ThemeMode>(() => {
