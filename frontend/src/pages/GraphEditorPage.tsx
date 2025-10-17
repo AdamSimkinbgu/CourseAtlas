@@ -685,37 +685,6 @@ function GraphEditorPageInner() {
     clearSelection();
   }, [clearSelection]);
 
-  // Debounced batch update for course positions - prevents overwhelming backend
-  const scheduleCoursePositionUpdates = useCallback(() => {
-    if (coursePositionUpdateTimeoutRef.current !== null) {
-      window.clearTimeout(coursePositionUpdateTimeoutRef.current);
-    }
-    coursePositionUpdateTimeoutRef.current = window.setTimeout(() => {
-      const updates = Array.from(pendingCourseUpdatesRef.current.entries());
-      pendingCourseUpdatesRef.current.clear();
-
-      // Send all pending updates in parallel with error handling and rollback
-      updates.forEach(([courseId, position]) => {
-        void updateCourseMutation
-          .mutateAsync({
-            courseId,
-            data: { position },
-          })
-          .catch((error) => {
-            console.error(`Failed to update course ${courseId} position`, error);
-            toast.error("Failed to save course position. Changes may be lost.", {
-              duration: 5000,
-            });
-            // Rollback: The cache wasn't updated optimistically, so no rollback needed
-            // But we should refetch to ensure consistency
-            void detailQuery.refetch();
-          });
-      });
-
-      coursePositionUpdateTimeoutRef.current = null;
-    }, 500); // 500ms debounce - balances responsiveness with backend load
-  }, [detailQuery, updateCourseMutation]);
-
   useEffect(() => {
     // Capture refs for cleanup (#18)
     const courseTimeoutRef = coursePositionUpdateTimeoutRef;
@@ -819,32 +788,52 @@ function GraphEditorPageInner() {
 
   const updateGraphMutation = useUpdateGraphMutation(graphId ?? "");
 
-  const flushContainerPersistence = useCallback(async () => {
+  // Unified flush function for both containers and course positions (#6)
+  // This eliminates race conditions by handling both updates atomically
+  const flushGraphPersistence = useCallback(async () => {
     if (!graphId) return;
-    const serialized = serializeContainersFromNodes();
+    const serializedContainers = serializeContainersFromNodes();
+    const courseUpdates = Array.from(pendingCourseUpdatesRef.current.entries());
+    pendingCourseUpdatesRef.current.clear();
 
-    // CRITICAL FIX: When updating container positions in cache, also update child course positions
-    // This prevents the rebuild effect from using stale child positions with new container positions
+    // Atomic cache update: both containers AND course positions together
     const rollback = updateGraphCache((draft) => {
-      draft.graph.containers = serialized.map((container) => ({ ...container }));
+      // Update containers
+      draft.graph.containers = serializedContainers.map((container) => ({ ...container }));
 
-      // Update child course positions based on pending updates
-      if (pendingCourseUpdatesRef.current.size > 0) {
-        pendingCourseUpdatesRef.current.forEach((position, courseId) => {
-          const courseIndex = draft.courses.findIndex((c) => c.id === courseId);
-          if (courseIndex !== -1) {
-            draft.courses[courseIndex].position_x = position.x;
-            draft.courses[courseIndex].position_y = position.y;
-          }
-        });
-      }
+      // Update course positions
+      courseUpdates.forEach(([courseId, position]) => {
+        const courseIndex = draft.courses.findIndex((c) => c.id === courseId);
+        if (courseIndex !== -1) {
+          draft.courses[courseIndex].position_x = position.x;
+          draft.courses[courseIndex].position_y = position.y;
+        }
+      });
     });
+
     await enqueueGraphMutation(async () => {
       try {
-        await updateGraphMutation.mutateAsync({ containers: serialized });
+        // Update containers
+        await updateGraphMutation.mutateAsync({ containers: serializedContainers });
+
+        // Update course positions
+        courseUpdates.forEach(([courseId, position]) => {
+          void updateCourseMutation
+            .mutateAsync({
+              courseId,
+              data: { position },
+            })
+            .catch((error) => {
+              console.error(`Failed to update course ${courseId} position`, error);
+              toast.error("Failed to save course position. Changes may be lost.", {
+                duration: 5000,
+              });
+              void detailQuery.refetch();
+            });
+        });
       } catch (error) {
-        console.error("Failed to persist containers", error);
-        toast.error("Failed to save container changes. Please try again.", {
+        console.error("Failed to persist graph changes", error);
+        toast.error("Failed to save changes. Please try again.", {
           duration: 5000,
         });
         rollback();
@@ -852,23 +841,43 @@ function GraphEditorPageInner() {
       }
     });
   }, [
+    detailQuery,
     enqueueGraphMutation,
     graphId,
     serializeContainersFromNodes,
+    updateCourseMutation,
     updateGraphCache,
     updateGraphMutation,
   ]);
 
-  const scheduleContainerPersistence = useCallback(() => {
+  // Legacy wrapper for backward compatibility
+  // Unified scheduler: replaces both scheduleCoursePositionUpdates and scheduleContainerPersistence (#6)
+  const scheduleGraphPersistence = useCallback(() => {
+    // Clear any existing timers
+    if (coursePositionUpdateTimeoutRef.current !== null) {
+      window.clearTimeout(coursePositionUpdateTimeoutRef.current);
+      coursePositionUpdateTimeoutRef.current = null;
+    }
     if (containerPersistTimeoutRef.current !== null) {
       window.clearTimeout(containerPersistTimeoutRef.current);
     }
+
+    // Use unified 500ms debounce
     containerPersistTimeoutRef.current = window.setTimeout(() => {
-      flushContainerPersistence().finally(() => {
+      flushGraphPersistence().finally(() => {
         containerPersistTimeoutRef.current = null;
       });
-    }, 300);
-  }, [flushContainerPersistence]);
+    }, 500);
+  }, [flushGraphPersistence]);
+
+  // Legacy wrappers for backward compatibility - both now use unified scheduler
+  const scheduleContainerPersistence = useCallback(() => {
+    scheduleGraphPersistence();
+  }, [scheduleGraphPersistence]);
+
+  const scheduleCoursePositionUpdates = useCallback(() => {
+    scheduleGraphPersistence();
+  }, [scheduleGraphPersistence]);
 
   const persistAssignments = useMemo(
     () =>

@@ -12,7 +12,7 @@
 - [x] **#3** Fix nodesMapRef update inconsistency across all mutation paths ✅ **RESOLVED** (Oct 17, 2025)
 - [x] **#5** Implement user-facing error notifications (replace console.error) ✅ **RESOLVED** (Oct 17, 2025)
 - [x] **#18** Add cleanup for pending mutations on component unmount ✅ **RESOLVED** (Oct 17, 2025)
-- [ ] **#6** Eliminate race conditions in container/course debounced updates
+- [x] **#6** Eliminate race conditions in container/course debounced updates ✅ **RESOLVED** (Oct 17, 2025)
 
 ### ⚠️ P1 - High Priority (Next Sprint)
 - [ ] **#1** Break 3,758-line component into smaller components (~5 sub-components)
@@ -397,21 +397,18 @@ npm install react-hot-toast
 **Risk**: Low
 
 **✅ RESOLVED**: October 17, 2025
-- **Solution**: Installed react-hot-toast and added user-facing notifications
+- **Solution**: Installed react-hot-toast and added comprehensive user-facing notifications
 - **Changes**:
-  - Added Toaster component to App.tsx with custom styling
+  - Added Toaster component to App.tsx with dark theme
   - Imported toast in GraphEditorPage.tsx
-  - Updated 7 critical error handlers:
-    - Course position updates (line 705)
-    - Container persistence (line 847)
-    - Course creation (line 1767, 1770)
-    - Course deletion (line 1638-1646)
-    - Graph export (line 1690)
-    - Graph import (line 1733)
-  - Replaced `alert()` calls with `toast.error()` and `toast.success()`
-  - Added success notifications for create, delete, import, export operations
-- **Impact**: Users now see visual feedback for all critical operations
-- **Testing**: No lint errors, toast notifications work correctly
+  - Updated 15+ operations with notifications:
+    - **Errors**: Course position updates, container persistence, course creation, deletion, export, import, sample graph, course updates, prerequisites
+    - **Success**: Container creation, course creation, course updates, deletion (with count), export, import, sample graph, prerequisites, undo/redo
+    - **Validation**: Replaced alert() with toast.error() for form validation
+  - Undo/Redo: Subtle 2s toasts with "No more actions" feedback
+  - All alert() calls replaced with toast notifications
+- **Impact**: Users now see visual feedback for ALL operations with consistent styling
+- **Testing**: No lint errors, 15+ toast notifications working correctly
 
 ---
 
@@ -496,6 +493,22 @@ const scheduleGraphUpdate = useCallback(() => {
 
 **Estimated Effort**: 3 hours  
 **Risk**: Medium
+
+**✅ RESOLVED**: October 17, 2025
+- **Solution**: Unified debounce timer with atomic cache updates
+- **Changes**:
+  - Created `flushGraphPersistence` function (lines 795-853 in GraphEditorPage.tsx): Atomic flush of both containers AND pending course updates together
+  - Created `scheduleGraphPersistence` function (lines 854-870): Unified 500ms debounce timer that clears both timer refs
+  - Added legacy wrappers `scheduleContainerPersistence` and `scheduleCoursePositionUpdates` for backward compatibility
+  - Removed fragile workaround that manually copied pending course updates during container flush
+  - Both timers (coursePositionUpdateTimeoutRef and containerPersistTimeoutRef) cleared before scheduling new unified timer
+- **Impact**: 
+  - Race condition eliminated - containers and courses always updated atomically in cache
+  - Cache consistency guaranteed - no more stale child positions with new container positions
+  - No more visual glitches when dragging containers with children
+  - Cleaner code - single atomic update instead of fragile coupling between separate concerns
+  - Single 500ms debounce for all graph persistence operations
+- **Testing**: No lint errors, unified debounce implementation compiles successfully
 
 ---
 
