@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,12 +16,16 @@ class GraphCreateRequest(BaseModel):
     title: str
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
+    containers: Optional[List["GraphContainer"]] = None
+    container_assignments: Optional[Dict[str, str]] = None
 
 
 class GraphUpdateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     visibility: Optional[Visibility] = None
+    containers: Optional[List["GraphContainer"]] = None
+    container_assignments: Optional[Dict[str, str]] = None
 
 
 class GraphDuplicateRequest(BaseModel):
@@ -40,6 +44,8 @@ class GraphRead(BaseModel):
     visibility: Visibility
     created_at: datetime
     updated_at: datetime
+    containers: List["GraphContainer"] = Field(default_factory=list)
+    container_assignments: Dict[str, str] = Field(default_factory=dict)
 
 
 class Position(BaseModel):
@@ -144,5 +150,34 @@ class GraphExportResponse(BaseModel):
 
 
 class GraphImportRequest(BaseModel):
-    courses: List[CourseCreateRequest]
+    containers: List["GraphContainer"] = Field(default_factory=list)
+    container_assignments: Dict[str, str] = Field(default_factory=dict)
+    courses: List["GraphImportCourse"]
     replace_existing: bool = False
+
+
+class GraphContainer(BaseModel):
+    id: str
+    title: str
+    palette_id: Optional[str] = None
+    color: str
+    width: float
+    height: float
+    position: Position
+
+
+class GraphImportCourse(BaseModel):
+    id: Optional[str] = None
+    code: str
+    title: str
+    credits: int
+    term: Optional[str] = None
+    status: CourseStatus = CourseStatus.PLANNED
+    grade: Optional[Decimal] = None
+    is_pass_fail: bool = False
+    position: Position = Field(default_factory=lambda: Position(x=0.0, y=0.0))
+    notes: Optional[str] = None
+    prerequisites: List[PrerequisiteItem] = Field(default_factory=list)
+
+
+GraphRead.model_rebuild()

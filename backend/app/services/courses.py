@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 from uuid import UUID
 
 from app.domain.models import Course, CourseStatus
@@ -26,6 +26,9 @@ class CourseCreate:
     position_y: float = 0.0
     is_pass_fail: bool = False
     notes: Optional[str] = None
+
+
+GRADE_PASS_THRESHOLD = Decimal("56")
 
 
 class CourseService:
@@ -53,8 +56,22 @@ class CourseService:
         )
         return self.course_repo.create(course)
 
-    def update_course(self, course_id: UUID, data: dict[str, object]) -> Course:
+    def update_course(self, course_id: UUID, data: Dict[str, object]) -> Course:
         course = self._get_course_or_error(course_id)
+        if "grade" in data:
+            raw_grade = data["grade"]
+            if raw_grade is None or raw_grade == "":
+                data["grade"] = None
+                data.setdefault("status", CourseStatus.PLANNED)
+            else:
+                grade_value = Decimal(str(raw_grade))
+                data["grade"] = grade_value
+                if grade_value >= GRADE_PASS_THRESHOLD:
+                    data["status"] = CourseStatus.COMPLETED
+                else:
+                    data["status"] = CourseStatus.FAILED
+        if "status" in data and isinstance(data["status"], str):
+            data["status"] = CourseStatus(data["status"])
         return self.course_repo.update(course, **data)
 
     def delete_course(self, course_id: UUID) -> None:
@@ -64,12 +81,12 @@ class CourseService:
     def get_course(self, course_id: UUID) -> Course:
         return self._get_course_or_error(course_id)
 
-    def list_courses_for_graph(self, graph_id: UUID) -> list[Course]:
+    def list_courses_for_graph(self, graph_id: UUID) -> List[Course]:
         return self.course_repo.list_by_graph(graph_id)
 
     def add_courses_bulk(
         self, graph_id: UUID, payloads: List[CourseCreate]
-    ) -> list[Course]:
+    ) -> List[Course]:
         if self.graph_repo.get(graph_id) is None:
             raise NotFoundError("Graph not found")
         courses = [
@@ -122,13 +139,13 @@ class CourseService:
     def _would_create_cycle(
         self, course_id: UUID, graph_id: UUID, prereq_ids: set[UUID]
     ) -> bool:
-        adjacency: dict[UUID, list[UUID]] = defaultdict(list)
+        adjacency: Dict[UUID, List[UUID]] = defaultdict(list)
         for existing in self.course_repo.list_by_graph(graph_id):
             for prereq in existing.prerequisites:
                 adjacency[existing.id].append(UUID(str(prereq["course_id"])))
         adjacency[course_id] = list(prereq_ids)
 
-        indegree: dict[UUID, int] = defaultdict(int)
+        indegree: Dict[UUID, int] = defaultdict(int)
         nodes = set(adjacency.keys()) | {
             cid for values in adjacency.values() for cid in values
         }
@@ -150,7 +167,7 @@ class CourseService:
         return visited != len(nodes)
 
     # Analytics ------------------------------------------------------------
-    def calculate_graph_gpa(self, graph_id: UUID) -> dict[str, Decimal]:
+    def calculate_graph_gpa(self, graph_id: UUID) -> Dict[str, Decimal]:
         courses = self.course_repo.list_by_graph(graph_id)
         total_points = Decimal("0")
         total_credits = Decimal("0")

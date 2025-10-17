@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Dict
-
-import httpx
 import jwt
+import logging
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
@@ -17,28 +15,9 @@ from app.exceptions import NotFoundError
 from app.repositories.users import UserRepository
 from app.services.users import UserService
 
+logger = logging.getLogger(__name__)
+
 http_bearer = HTTPBearer()
-
-
-@lru_cache(maxsize=1)
-def _fetch_jwks() -> Dict[str, Any]:
-    if not settings.auth_jwks_url:
-        raise RuntimeError("AUTH_JWKS_URL not configured")
-    response = httpx.get(settings.auth_jwks_url, timeout=10.0)
-    response.raise_for_status()
-    return response.json()
-
-
-def _get_signing_key(token: str) -> Dict[str, str]:
-    jwks = _fetch_jwks()
-    unverified_header = jwt.get_unverified_header(token)
-    kid = unverified_header.get("kid")
-    for key in jwks["keys"]:
-        if key.get("kid") == kid:
-            return key
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token header"
-    )
 
 
 async def get_current_user(
@@ -46,15 +25,22 @@ async def get_current_user(
     session: Session = Depends(get_session),  # noqa: B008
 ):
     token = credentials.credentials
-    signing_key = _get_signing_key(token)
+    if not settings.supabase_jwt_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase JWT secret not configured",
+        )
+    issuer = f"{settings.auth_domain.rstrip('/')}/auth/v1"
     try:
         payload = jwt.decode(
             token,
-            key=jwt.algorithms.RSAAlgorithm.from_jwk(signing_key),
-            algorithms=["RS256"],
+            key=settings.supabase_jwt_secret,
+            algorithms=["HS256"],
             audience=settings.auth_audience,
+            issuer=issuer,
         )
     except jwt.PyJWTError as exc:  # pragma: no cover - network dependency
+        logger.exception("JWT decode failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc

@@ -15,11 +15,15 @@ class Settings(BaseSettings):
     cors_origins: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
     database_url: str = Field(alias="DATABASE_URL")
     auth_domain: str = Field(default="", alias="AUTH_DOMAIN")
     auth_audience: str = Field(default="", alias="AUTH_AUDIENCE")
     auth_jwks_url: str = Field(default="", alias="AUTH_JWKS_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
+    supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
 
     model_config = SettingsConfigDict(
         env_file=".env",

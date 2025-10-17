@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Any, Dict, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -46,15 +47,38 @@ async def update_course(
     current_user: CurrentUser,
 ) -> schemas.CourseReadFormatted:
     data = payload.model_dump(exclude_none=True)
-    if "position" in data:
-        pos = data.pop("position")
-        data["position_x"] = pos.x
-        data["position_y"] = pos.y
+    position = data.pop("position", None)
+    position_tuple: Tuple[float, float] | None = None
+
+    if position is not None:
+        if isinstance(position, dict):
+            try:
+                position_tuple = (float(position["x"]), float(position["y"]))
+            except (KeyError, TypeError, ValueError) as exc:  # pragma: no cover
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid position payload; expected numeric x/y",
+                ) from exc
+        else:
+            position_tuple = (position.x, position.y)  # type: ignore[attr-defined]
+        data["position_x"], data["position_y"] = position_tuple
+
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No update fields provided"
         )
+
     updated = course_service.update_course(course_id, data)
+
+    extra_debug: Dict[str, Any] = {}
+    if position_tuple is not None:
+        extra_debug["position"] = {
+            "x": data.get("position_x"),
+            "y": data.get("position_y"),
+        }
+    if extra_debug:
+        logger.info("course_update %s %s", course_id, extra_debug)
+
     return _to_course_read(updated)
 
 
@@ -89,3 +113,4 @@ async def get_course(
 ) -> schemas.CourseReadFormatted:
     updated = course_service._get_course_or_error(course_id)  # type: ignore[attr-defined]
     return _to_course_read(updated)
+logger = logging.getLogger("course-update")

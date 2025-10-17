@@ -1,0 +1,276 @@
+{
+  "slug": "sample-large-plan",
+  "name": "Sample \u2013 CS Major Plan",
+  "description": "Larger example spanning four terms",
+  "tags": [
+    "sample",
+    "advanced"
+  ],
+  "graph": {
+    "title": "Sample - CS Major Plan",
+    "description": "Larger example spanning four terms",
+    "containers": [
+      {
+        "id": "year1-fall",
+        "title": "Year 1 / Fall",
+        "palette_id": "indigo",
+        "color": "rgba(79, 70, 229, 0.16)"
+      },
+      {
+        "id": "year1-spring",
+        "title": "Year 1 / Spring",
+        "palette_id": "teal",
+        "color": "rgba(13, 148, 136, 0.16)"
+      },
+      {
+        "id": "year2-fall",
+        "title": "Year 2 / Fall",
+        "palette_id": "amber",
+        "color": "rgba(217, 119, 6, 0.18)"
+      },
+      {
+        "id": "year2-spring",
+        "title": "Year 2 / Spring",
+        "palette_id": "rose",
+        "color": "rgba(225, 29, 72, 0.18)"
+      }
+    ],
+    "container_assignments": {
+      "intro-prog": "year1-fall",
+      "calc-1": "year1-fall",
+      "discrete": "year1-fall",
+      "algorithms": "year1-spring",
+      "calc-2": "year1-spring",
+      "systems": "year1-spring",
+      "databases": "year2-fall",
+      "software-eng": "year2-fall",
+      "ai-intro": "year2-spring",
+      "capstone": "year2-spring"
+    },
+    "container_order": [
+      "year1-fall",
+      "year1-spring",
+      "year2-fall",
+      "year2-spring"
+    ]
+  },
+  "courses": [
+    {
+      "id": "intro-prog",
+      "code": "CS101",
+      "title": "Intro to Programming",
+      "credits": 3,
+      "term": "Year 1 Fall",
+      "status": "completed",
+      "grade": 90,
+      "is_pass_fail": false,
+      "position": {
+        "x": -720,
+        "y": -240
+      },
+      "notes": "Completed with A",
+      "prerequisites": []
+    },
+    {
+      "id": "calc-1",
+      "code": "MATH101",
+      "title": "Calculus I",
+      "credits": 4,
+      "term": "Year 1 Fall",
+      "status": "completed",
+      "grade": 82,
+      "is_pass_fail": false,
+      "position": {
+        "x": -600,
+        "y": -60
+      },
+      "notes": "",
+      "prerequisites": []
+    },
+    {
+      "id": "discrete",
+      "code": "CS120",
+      "title": "Discrete Mathematics",
+      "credits": 4,
+      "term": "Year 1 Fall",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": -480,
+        "y": -200
+      },
+      "notes": "",
+      "prerequisites": []
+    },
+    {
+      "id": "algorithms",
+      "code": "CS201",
+      "title": "Data Structures",
+      "credits": 3,
+      "term": "Year 1 Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": -40,
+        "y": -220
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "intro-prog",
+          "condition": null
+        },
+        {
+          "course_id": "calc-1",
+          "condition": null
+        }
+      ]
+    },
+    {
+      "id": "calc-2",
+      "code": "MATH102",
+      "title": "Calculus II",
+      "credits": 4,
+      "term": "Year 1 Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 80,
+        "y": -40
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "calc-1",
+          "condition": null
+        }
+      ]
+    },
+    {
+      "id": "systems",
+      "code": "CS230",
+      "title": "Computer Systems",
+      "credits": 3,
+      "term": "Year 1 Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 40,
+        "y": -300
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "intro-prog",
+          "condition": null
+        }
+      ]
+    },
+    {
+      "id": "databases",
+      "code": "CS320",
+      "title": "Databases",
+      "credits": 3,
+      "term": "Year 2 Fall",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 580,
+        "y": -240
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "algorithms",
+          "condition": null
+        }
+      ]
+    },
+    {
+      "id": "software-eng",
+      "code": "CS340",
+      "title": "Software Engineering",
+      "credits": 3,
+      "term": "Year 2 Fall",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 720,
+        "y": -60
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "algorithms",
+          "condition": null
+        }
+      ]
+    },
+    {
+      "id": "ai-intro",
+      "code": "CS360",
+      "title": "Intro to AI",
+      "credits": 3,
+      "term": "Year 2 Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 1200,
+        "y": -200
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "algorithms",
+          "condition": "C or better"
+        }
+      ]
+    },
+    {
+      "id": "capstone",
+      "code": "CS499",
+      "title": "Capstone Project",
+      "credits": 4,
+      "term": "Year 2 Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 1320,
+        "y": -40
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "software-eng",
+          "condition": null
+        },
+        {
+          "course_id": "databases",
+          "condition": null
+        }
+      ]
+    }
+  ],
+  "layout_config": {
+    "mode": "sample",
+    "container_order": [
+      "year1-fall",
+      "year1-spring",
+      "year2-fall",
+      "year2-spring"
+    ],
+    "max_columns_per_container": 3,
+    "containers_per_row": 4,
+    "column_gap": 160,
+    "row_gap": 200,
+    "orphan_columns": 6
+  }
+}

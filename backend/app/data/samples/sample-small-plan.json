@@ -1,0 +1,107 @@
+{
+  "slug": "sample-small-plan",
+  "name": "Sample \u2013 Compact CS Plan",
+  "description": "Small example with two terms",
+  "tags": [
+    "sample",
+    "starter"
+  ],
+  "graph": {
+    "title": "Sample - First Year",
+    "description": "Small example with two terms",
+    "containers": [
+      {
+        "id": "term-1",
+        "title": "Term 1",
+        "palette_id": "indigo",
+        "color": "rgba(79, 70, 229, 0.16)"
+      },
+      {
+        "id": "term-2",
+        "title": "Term 2",
+        "palette_id": "teal",
+        "color": "rgba(13, 148, 136, 0.16)"
+      }
+    ],
+    "container_assignments": {
+      "cs101": "term-1",
+      "math101": "term-1",
+      "cs201": "term-2"
+    },
+    "container_order": [
+      "term-1",
+      "term-2"
+    ]
+  },
+  "courses": [
+    {
+      "id": "cs101",
+      "code": "CS101",
+      "title": "Intro to Programming",
+      "credits": 3,
+      "term": "Fall",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": -320,
+        "y": -120
+      },
+      "notes": "",
+      "prerequisites": []
+    },
+    {
+      "id": "math101",
+      "code": "MATH101",
+      "title": "Calculus I",
+      "credits": 4,
+      "term": "Fall",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": -180,
+        "y": 40
+      },
+      "notes": "",
+      "prerequisites": []
+    },
+    {
+      "id": "cs201",
+      "code": "CS201",
+      "title": "Data Structures",
+      "credits": 3,
+      "term": "Spring",
+      "status": "planned",
+      "grade": null,
+      "is_pass_fail": false,
+      "position": {
+        "x": 320,
+        "y": -80
+      },
+      "notes": "",
+      "prerequisites": [
+        {
+          "course_id": "cs101",
+          "condition": null
+        },
+        {
+          "course_id": "math101",
+          "condition": null
+        }
+      ]
+    }
+  ],
+  "layout_config": {
+    "mode": "sample",
+    "container_order": [
+      "term-1",
+      "term-2"
+    ],
+    "max_columns_per_container": 3,
+    "containers_per_row": 4,
+    "column_gap": 160,
+    "row_gap": 200,
+    "orphan_columns": 6
+  }
+}
