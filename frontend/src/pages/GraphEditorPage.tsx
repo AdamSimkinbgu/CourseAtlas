@@ -66,9 +66,9 @@ import {
   type NormalisedContainer,
   type SampleGraph,
 } from "../sections/graph-editor/sampleGraphImport";
-import { Skeleton } from "../components/Skeleton";
 import { useLoadingState, LoadingOperations } from "../hooks/useLoadingState";
 import { InlineSpinner } from "../components/Spinner";
+import { GraphEditorSkeleton } from "../components/SkeletonLoader";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ContainerShape } from "../sections/graph-editor/types";
 import {
@@ -1494,7 +1494,7 @@ function GraphEditorPageInner() {
       });
       await Promise.all(tasks);
       setTimeout(() => pushHistory(), 0);
-      
+
       if (edgesToDelete.length > 0) {
         toast.success(
           edgesToDelete.length === 1
@@ -1590,7 +1590,7 @@ function GraphEditorPageInner() {
       pushHistory();
       scheduleContainerPersistence();
     }, 0);
-    
+
     toast.success(`Created ${container.title}`);
   }, [
     openInspectorForContainer,
@@ -1635,16 +1635,16 @@ function GraphEditorPageInner() {
 
   const handleDeleteSelection = useCallback(async () => {
     loading.start(LoadingOperations.DELETE_NODES);
-    
+
     const selectedNodes = nodesRef.current.filter((node) => node.selected);
     const courseNodesToDelete = selectedNodes.filter((node) => node.type === "course");
     const containerNodesToDelete = selectedNodes.filter((node) => node.type === "container");
-    
+
     // Save state for rollback
     const previousAssignments = { ...courseAssignments };
     const previousNodes = [...nodesRef.current];
     const previousEdges = [...edgesRef.current];
-    
+
     let removedContainer = false;
     let deletedCount = 0;
     let failedCount = 0;
@@ -1710,7 +1710,7 @@ function GraphEditorPageInner() {
           `Failed to delete ${failedCount} ${failedCount === 1 ? "item" : "items"}. Rolling back changes.`,
           { duration: 5000 }
         );
-        
+
         // Rollback on error
         updateGraphCache((draft) => {
           const currentCourseIds = new Set(draft.courses.map((c) => c.id));
@@ -1738,7 +1738,7 @@ function GraphEditorPageInner() {
     } catch (error) {
       console.error("Deletion failed:", error);
       toast.error("Failed to delete items. Rolling back changes.", { duration: 5000 });
-      
+
       // Rollback all changes
       updateGraphCache((draft) => {
         const currentCourseIds = new Set(draft.courses.map((c) => c.id));
@@ -2475,435 +2475,440 @@ function GraphEditorPageInner() {
               } as React.CSSProperties
             }
           >
-            {detailQuery.isLoading && <Skeleton className="absolute inset-0" />}
-            <ReactFlowProvider>
-              <GraphEditorCanvas
-                theme={theme}
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={handleNodesChange}
-                onEdgesChange={handleEdgesChange}
-                onSelectionChange={handleSelectionChange}
-                onNodeClick={handleNodeClick}
-                onPaneClick={handlePaneClick}
-                onNodeDrag={handleNodeDrag}
-                onNodeDragStart={handleNodeDragStart}
-                onNodeDragStop={handleNodeDragStop}
-                onNodeDoubleClick={handleNodeDoubleClick}
-                onConnect={handleConnect}
-                onEdgesDelete={handleEdgesDelete}
-                onReady={(instance) => {
-                  reactFlowInstanceRef.current = instance;
-                  instance.fitView({ padding: canvasFitViewPadding });
-                }}
-                minZoom={canvasMinZoom}
-                showMiniMap={showMiniMap}
-                gridStyle={gridStyle}
-                gridDotSize={gridDotSize}
-                gridLineWidth={gridLineWidth}
-              />
-            </ReactFlowProvider>
-
-            <div className="pointer-events-none absolute inset-0">
-              <div className="pointer-events-auto absolute left-6 top-6 z-20 flex flex-wrap items-start gap-3">
-                <div className={infoBubbleClasses}>{infoBubbleContent}</div>
-                <div className="relative">
-                  <button
-                    type="button"
-                    aria-haspopup="true"
-                    aria-expanded={isMenuOpen}
-                    disabled={!hasSelection}
-                    onClick={() => hasSelection && setIsMenuOpen((prev) => !prev)}
-                    className={`${menuButtonClasses} ${hasSelection ? "" : "cursor-not-allowed opacity-40"}`}
-                  >
-                    <span className="text-base">{isMenuOpen ? "→" : "↠"}</span>
-                  </button>
-                  {isMenuOpen && menuItems.length > 0 ? (
-                    <div className={menuPanelClasses}>
-                      <ul className="flex flex-col gap-1">
-                        {menuItems.map((item) => (
-                          <li key={item.label}>
-                            <button
-                              type="button"
-                              onClick={item.action}
-                              className={`${menuItemClasses} ${item.danger ? menuItemDangerClasses : ""}`}
-                            >
-                              {item.label}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="pointer-events-auto absolute right-6 top-6 z-20 flex flex-row items-start gap-3">
-                <div className="relative flex flex-col items-end">
-                  <button
-                    type="button"
-                    aria-expanded={isSettingsOpen}
-                    onClick={() => {
-                      setIsSettingsOpen((prev) => !prev);
-                      setIsGraphActionsOpen(false);
+            {detailQuery.isLoading ? (
+              <GraphEditorSkeleton />
+            ) : (
+              <>
+                <ReactFlowProvider>
+                  <GraphEditorCanvas
+                    theme={theme}
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
+                    onSelectionChange={handleSelectionChange}
+                    onNodeClick={handleNodeClick}
+                    onPaneClick={handlePaneClick}
+                    onNodeDrag={handleNodeDrag}
+                    onNodeDragStart={handleNodeDragStart}
+                    onNodeDragStop={handleNodeDragStop}
+                    onNodeDoubleClick={handleNodeDoubleClick}
+                    onConnect={handleConnect}
+                    onEdgesDelete={handleEdgesDelete}
+                    onReady={(instance) => {
+                      reactFlowInstanceRef.current = instance;
+                      instance.fitView({ padding: canvasFitViewPadding });
                     }}
-                    className={graphActionsButtonClasses}
-                  >
-                    ⚙️ Settings
-                  </button>
-                  {isSettingsOpen ? (
-                    <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
-                      <div className="space-y-5">
-                        {/* Appearance Section */}
-                        <div className="space-y-3">
-                          <div
-                            className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                          >
-                            Appearance
-                          </div>
+                    minZoom={canvasMinZoom}
+                    showMiniMap={showMiniMap}
+                    gridStyle={gridStyle}
+                    gridDotSize={gridDotSize}
+                    gridLineWidth={gridLineWidth}
+                  />
+                </ReactFlowProvider>
 
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">🎨</span>
-                              <span className="text-sm font-medium">Theme</span>
-                            </div>
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => theme === "dark" && handleThemeToggle()}
-                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                                  theme === "light"
-                                    ? "bg-gradient-to-br from-amber-400/95 to-orange-500/95 text-white border border-orange-400 shadow-md"
-                                    : theme === "dark"
-                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40 hover:text-slate-300"
-                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
-                                }`}
-                              >
-                                ☀️ Light
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => theme === "light" && handleThemeToggle()}
-                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                                  theme === "dark"
-                                    ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/30 text-indigo-200 border border-indigo-400/50 shadow-sm"
-                                    : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
-                                }`}
-                              >
-                                🌙 Dark
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">⊞</span>
-                              <span className="text-sm font-medium">Grid Style</span>
-                            </div>
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setGridStyle("dots")}
-                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                                  gridStyle === "dots"
-                                    ? theme === "dark"
-                                      ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
-                                      : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
-                                    : theme === "dark"
-                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
-                                }`}
-                              >
-                                •• Dots
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setGridStyle("lines")}
-                                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                                  gridStyle === "lines"
-                                    ? theme === "dark"
-                                      ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
-                                      : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
-                                    : theme === "dark"
-                                      ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                      : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
-                                }`}
-                              >
-                                ⊞ Lines
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Divider */}
-                        <div
-                          className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-300"}`}
-                        />
-
-                        {/* Features Section */}
-                        <div className="space-y-3">
-                          <div
-                            className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
-                          >
-                            Features
-                          </div>
-
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">🗺️</span>
-                              <span className="text-sm font-medium">Minimap</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowMiniMap((prev) => !prev)}
-                              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 min-w-[85px] ${
-                                showMiniMap
-                                  ? theme === "dark"
-                                    ? "bg-gradient-to-br from-emerald-500/30 to-green-500/30 text-emerald-200 border border-emerald-400/50 shadow-sm"
-                                    : "bg-gradient-to-br from-emerald-500/95 to-green-600/95 text-white border border-emerald-500 shadow-md"
-                                  : theme === "dark"
-                                    ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
-                                    : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
-                              }`}
-                            >
-                              {showMiniMap ? "✓ Shown" : "Hidden"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Grid Thickness Controls */}
-                      <div
-                        className={`${
-                          theme === "dark"
-                            ? "bg-slate-800/40 border-slate-700/50"
-                            : "bg-white/60 border-slate-200"
-                        } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
-                      >
-                        <h3
-                          className={`text-sm font-semibold mb-4 ${
-                            theme === "dark" ? "text-slate-200" : "text-slate-800"
-                          }`}
-                        >
-                          Grid Thickness
-                        </h3>
-                        <div className="space-y-4">
-                          {/* Dot Size Slider - Only show when dots are active */}
-                          {gridStyle === "dots" && (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <label
-                                  htmlFor="grid-dot-size"
-                                  className="text-sm font-medium flex items-center gap-2"
-                                >
-                                  <span>⚫</span>
-                                  <span>Dot Size</span>
-                                </label>
-                                <span
-                                  className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                    theme === "dark"
-                                      ? "bg-slate-700/50 text-slate-300"
-                                      : "bg-slate-200 text-slate-700"
-                                  }`}
-                                >
-                                  {gridDotSize.toFixed(1)}px
-                                </span>
-                              </div>
-                              <input
-                                id="grid-dot-size"
-                                type="range"
-                                min="0.5"
-                                max="3"
-                                step="0.1"
-                                value={gridDotSize}
-                                onChange={(e) => setGridDotSize(parseFloat(e.target.value))}
-                                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                                style={{
-                                  background:
-                                    theme === "dark"
-                                      ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
-                                      : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
-                                }}
-                              />
-                            </div>
-                          )}
-
-                          {/* Line Width Slider - Only show when lines are active */}
-                          {gridStyle === "lines" && (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <label
-                                  htmlFor="grid-line-width"
-                                  className="text-sm font-medium flex items-center gap-2"
-                                >
-                                  <span>━</span>
-                                  <span>Line Width</span>
-                                </label>
-                                <span
-                                  className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                    theme === "dark"
-                                      ? "bg-slate-700/50 text-slate-300"
-                                      : "bg-slate-200 text-slate-700"
-                                  }`}
-                                >
-                                  {gridLineWidth.toFixed(1)}px
-                                </span>
-                              </div>
-                              <input
-                                id="grid-line-width"
-                                type="range"
-                                min="0.5"
-                                max="5"
-                                step="0.1"
-                                value={gridLineWidth}
-                                onChange={(e) => setGridLineWidth(parseFloat(e.target.value))}
-                                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                                style={{
-                                  background:
-                                    theme === "dark"
-                                      ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
-                                      : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Node Styling Controls */}
-                      <div
-                        className={`${
-                          theme === "dark"
-                            ? "bg-slate-800/40 border-slate-700/50"
-                            : "bg-white/60 border-slate-200"
-                        } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
-                      >
-                        <h3
-                          className={`text-sm font-semibold mb-4 ${
-                            theme === "dark" ? "text-slate-200" : "text-slate-800"
-                          }`}
-                        >
-                          Node Styling
-                        </h3>
-                        <div className="space-y-4">
-                          {/* Node Blur Slider */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label
-                                htmlFor="node-blur"
-                                className="text-sm font-medium flex items-center gap-2"
-                              >
-                                <span>🌫️</span>
-                                <span>Background Blur</span>
-                              </label>
-                              <span
-                                className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                                  theme === "dark"
-                                    ? "bg-slate-700/50 text-slate-300"
-                                    : "bg-slate-200 text-slate-700"
-                                }`}
-                              >
-                                {nodeBlur}px
-                              </span>
-                            </div>
-                            <input
-                              id="node-blur"
-                              type="range"
-                              min="0"
-                              max="20"
-                              step="1"
-                              value={nodeBlur}
-                              onChange={(e) => setNodeBlur(parseInt(e.target.value))}
-                              className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                              style={{
-                                background:
-                                  theme === "dark"
-                                    ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
-                                    : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="relative flex flex-col items-end">
-                  <button
-                    type="button"
-                    aria-expanded={isGraphActionsOpen}
-                    onClick={() => {
-                      setIsGraphActionsOpen((prev) => !prev);
-                      setIsSettingsOpen(false);
-                    }}
-                    className={graphActionsButtonClasses}
-                  >
-                    Graph actions
-                  </button>
-                  {isGraphActionsOpen ? (
-                    <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
-                      <div className="space-y-1.5">
-                        {graphActionItems.map((item, index) => (
-                          <button
-                            key={item.label}
-                            type="button"
-                            onClick={item.action}
-                            disabled={item.disabled}
-                            className={`${graphActionItemClasses} ${
-                              item.disabled ? "cursor-not-allowed opacity-40" : ""
-                            } ${index === 0 ? "" : ""}`}
-                          >
-                            <span className="flex items-center justify-between gap-3">
-                              <span>{item.label}</span>
-                              {!item.disabled && (
-                                <span
-                                  className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}
-                                >
-                                  →
-                                </span>
-                              )}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleOpenDetailsSurface}
-                disabled={!canOpenInspector}
-                className="pointer-events-auto absolute bottom-6 right-6 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
-              >
-                {canOpenInspector ? "Open details" : "Select an item"}
-              </button>
-
-              {isLargeViewport && isDetailOpen && hasSelection ? (
-                <div className="pointer-events-auto absolute right-6 top-32 z-20 w-[24rem] max-w-full">
-                  <div className={inspectorBubbleClasses}>
-                    <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
-                      <span>Details</span>
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="pointer-events-auto absolute left-6 top-6 z-20 flex flex-wrap items-start gap-3">
+                    <div className={infoBubbleClasses}>{infoBubbleContent}</div>
+                    <div className="relative">
                       <button
                         type="button"
-                        onClick={() => closeSelectionDetail()}
-                        className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                        aria-haspopup="true"
+                        aria-expanded={isMenuOpen}
+                        disabled={!hasSelection}
+                        onClick={() => hasSelection && setIsMenuOpen((prev) => !prev)}
+                        className={`${menuButtonClasses} ${hasSelection ? "" : "cursor-not-allowed opacity-40"}`}
                       >
-                        Close
+                        <span className="text-base">{isMenuOpen ? "→" : "↠"}</span>
                       </button>
-                    </div>
-                    <div
-                      className="max-h-[70vh] overflow-y-auto pr-1"
-                      data-testid="inspector-expanded"
-                    >
-                      {inspectorContent}
+                      {isMenuOpen && menuItems.length > 0 ? (
+                        <div className={menuPanelClasses}>
+                          <ul className="flex flex-col gap-1">
+                            {menuItems.map((item) => (
+                              <li key={item.label}>
+                                <button
+                                  type="button"
+                                  onClick={item.action}
+                                  className={`${menuItemClasses} ${item.danger ? menuItemDangerClasses : ""}`}
+                                >
+                                  {item.label}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
+
+                  <div className="pointer-events-auto absolute right-6 top-6 z-20 flex flex-row items-start gap-3">
+                    <div className="relative flex flex-col items-end">
+                      <button
+                        type="button"
+                        aria-expanded={isSettingsOpen}
+                        onClick={() => {
+                          setIsSettingsOpen((prev) => !prev);
+                          setIsGraphActionsOpen(false);
+                        }}
+                        className={graphActionsButtonClasses}
+                      >
+                        ⚙️ Settings
+                      </button>
+                      {isSettingsOpen ? (
+                        <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
+                          <div className="space-y-5">
+                            {/* Appearance Section */}
+                            <div className="space-y-3">
+                              <div
+                                className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                              >
+                                Appearance
+                              </div>
+
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">🎨</span>
+                                  <span className="text-sm font-medium">Theme</span>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => theme === "dark" && handleThemeToggle()}
+                                    className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                      theme === "light"
+                                        ? "bg-gradient-to-br from-amber-400/95 to-orange-500/95 text-white border border-orange-400 shadow-md"
+                                        : theme === "dark"
+                                          ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40 hover:text-slate-300"
+                                          : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
+                                    }`}
+                                  >
+                                    ☀️ Light
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => theme === "light" && handleThemeToggle()}
+                                    className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                      theme === "dark"
+                                        ? "bg-gradient-to-br from-indigo-500/30 to-purple-500/30 text-indigo-200 border border-indigo-400/50 shadow-sm"
+                                        : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
+                                    }`}
+                                  >
+                                    🌙 Dark
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">⊞</span>
+                                  <span className="text-sm font-medium">Grid Style</span>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setGridStyle("dots")}
+                                    className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                      gridStyle === "dots"
+                                        ? theme === "dark"
+                                          ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
+                                          : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
+                                        : theme === "dark"
+                                          ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
+                                          : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
+                                    }`}
+                                  >
+                                    •• Dots
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setGridStyle("lines")}
+                                    className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                                      gridStyle === "lines"
+                                        ? theme === "dark"
+                                          ? "bg-blue-500/30 text-blue-200 border border-blue-400/50 shadow-sm"
+                                          : "bg-gradient-to-br from-blue-500/95 to-blue-600/95 text-white border border-blue-500 shadow-md"
+                                        : theme === "dark"
+                                          ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
+                                          : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
+                                    }`}
+                                  >
+                                    ⊞ Lines
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Divider */}
+                            <div
+                              className={`border-t ${theme === "dark" ? "border-slate-700/50" : "border-slate-300"}`}
+                            />
+
+                            {/* Features Section */}
+                            <div className="space-y-3">
+                              <div
+                                className={`pb-2 text-xs font-bold uppercase tracking-wider ${theme === "dark" ? "text-slate-400" : "text-slate-600"}`}
+                              >
+                                Features
+                              </div>
+
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">🗺️</span>
+                                  <span className="text-sm font-medium">Minimap</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMiniMap((prev) => !prev)}
+                                  className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 min-w-[85px] ${
+                                    showMiniMap
+                                      ? theme === "dark"
+                                        ? "bg-gradient-to-br from-emerald-500/30 to-green-500/30 text-emerald-200 border border-emerald-400/50 shadow-sm"
+                                        : "bg-gradient-to-br from-emerald-500/95 to-green-600/95 text-white border border-emerald-500 shadow-md"
+                                      : theme === "dark"
+                                        ? "bg-slate-800/30 text-slate-400 border border-slate-700/50 hover:bg-slate-700/40"
+                                        : "bg-slate-200 text-slate-700 border border-slate-400 hover:bg-slate-300"
+                                  }`}
+                                >
+                                  {showMiniMap ? "✓ Shown" : "Hidden"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Grid Thickness Controls */}
+                          <div
+                            className={`${
+                              theme === "dark"
+                                ? "bg-slate-800/40 border-slate-700/50"
+                                : "bg-white/60 border-slate-200"
+                            } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
+                          >
+                            <h3
+                              className={`text-sm font-semibold mb-4 ${
+                                theme === "dark" ? "text-slate-200" : "text-slate-800"
+                              }`}
+                            >
+                              Grid Thickness
+                            </h3>
+                            <div className="space-y-4">
+                              {/* Dot Size Slider - Only show when dots are active */}
+                              {gridStyle === "dots" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <label
+                                      htmlFor="grid-dot-size"
+                                      className="text-sm font-medium flex items-center gap-2"
+                                    >
+                                      <span>⚫</span>
+                                      <span>Dot Size</span>
+                                    </label>
+                                    <span
+                                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                        theme === "dark"
+                                          ? "bg-slate-700/50 text-slate-300"
+                                          : "bg-slate-200 text-slate-700"
+                                      }`}
+                                    >
+                                      {gridDotSize.toFixed(1)}px
+                                    </span>
+                                  </div>
+                                  <input
+                                    id="grid-dot-size"
+                                    type="range"
+                                    min="0.5"
+                                    max="3"
+                                    step="0.1"
+                                    value={gridDotSize}
+                                    onChange={(e) => setGridDotSize(parseFloat(e.target.value))}
+                                    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                                    style={{
+                                      background:
+                                        theme === "dark"
+                                          ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                          : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
+                                    }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Line Width Slider - Only show when lines are active */}
+                              {gridStyle === "lines" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <label
+                                      htmlFor="grid-line-width"
+                                      className="text-sm font-medium flex items-center gap-2"
+                                    >
+                                      <span>━</span>
+                                      <span>Line Width</span>
+                                    </label>
+                                    <span
+                                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                        theme === "dark"
+                                          ? "bg-slate-700/50 text-slate-300"
+                                          : "bg-slate-200 text-slate-700"
+                                      }`}
+                                    >
+                                      {gridLineWidth.toFixed(1)}px
+                                    </span>
+                                  </div>
+                                  <input
+                                    id="grid-line-width"
+                                    type="range"
+                                    min="0.5"
+                                    max="5"
+                                    step="0.1"
+                                    value={gridLineWidth}
+                                    onChange={(e) => setGridLineWidth(parseFloat(e.target.value))}
+                                    className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                                    style={{
+                                      background:
+                                        theme === "dark"
+                                          ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                          : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Node Styling Controls */}
+                          <div
+                            className={`${
+                              theme === "dark"
+                                ? "bg-slate-800/40 border-slate-700/50"
+                                : "bg-white/60 border-slate-200"
+                            } backdrop-blur-sm rounded-xl p-5 border shadow-md`}
+                          >
+                            <h3
+                              className={`text-sm font-semibold mb-4 ${
+                                theme === "dark" ? "text-slate-200" : "text-slate-800"
+                              }`}
+                            >
+                              Node Styling
+                            </h3>
+                            <div className="space-y-4">
+                              {/* Node Blur Slider */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label
+                                    htmlFor="node-blur"
+                                    className="text-sm font-medium flex items-center gap-2"
+                                  >
+                                    <span>🌫️</span>
+                                    <span>Background Blur</span>
+                                  </label>
+                                  <span
+                                    className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                                      theme === "dark"
+                                        ? "bg-slate-700/50 text-slate-300"
+                                        : "bg-slate-200 text-slate-700"
+                                    }`}
+                                  >
+                                    {nodeBlur}px
+                                  </span>
+                                </div>
+                                <input
+                                  id="node-blur"
+                                  type="range"
+                                  min="0"
+                                  max="20"
+                                  step="1"
+                                  value={nodeBlur}
+                                  onChange={(e) => setNodeBlur(parseInt(e.target.value))}
+                                  className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                                  style={{
+                                    background:
+                                      theme === "dark"
+                                        ? "linear-gradient(to right, #475569 0%, #64748b 100%)"
+                                        : "linear-gradient(to right, #cbd5e1 0%, #94a3b8 100%)",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="relative flex flex-col items-end">
+                      <button
+                        type="button"
+                        aria-expanded={isGraphActionsOpen}
+                        onClick={() => {
+                          setIsGraphActionsOpen((prev) => !prev);
+                          setIsSettingsOpen(false);
+                        }}
+                        className={graphActionsButtonClasses}
+                      >
+                        Graph actions
+                      </button>
+                      {isGraphActionsOpen ? (
+                        <div className={`${graphActionPanelClasses} absolute top-full mt-3`}>
+                          <div className="space-y-1.5">
+                            {graphActionItems.map((item, index) => (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={item.action}
+                                disabled={item.disabled}
+                                className={`${graphActionItemClasses} ${
+                                  item.disabled ? "cursor-not-allowed opacity-40" : ""
+                                } ${index === 0 ? "" : ""}`}
+                              >
+                                <span className="flex items-center justify-between gap-3">
+                                  <span>{item.label}</span>
+                                  {!item.disabled && (
+                                    <span
+                                      className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-slate-400"}`}
+                                    >
+                                      →
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenDetailsSurface}
+                    disabled={!canOpenInspector}
+                    className="pointer-events-auto absolute bottom-6 right-6 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
+                  >
+                    {canOpenInspector ? "Open details" : "Select an item"}
+                  </button>
+
+                  {isLargeViewport && isDetailOpen && hasSelection ? (
+                    <div className="pointer-events-auto absolute right-6 top-32 z-20 w-[24rem] max-w-full">
+                      <div className={inspectorBubbleClasses}>
+                        <div className="mb-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
+                          <span>Details</span>
+                          <button
+                            type="button"
+                            onClick={() => closeSelectionDetail()}
+                            className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <div
+                          className="max-h-[70vh] overflow-y-auto pr-1"
+                          data-testid="inspector-expanded"
+                        >
+                          {inspectorContent}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>
