@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useReducer } from "react";
+import { createContext, useCallback, useContext, useMemo, useReducer } from "react";
 
 type SelectionKind = "course" | "container";
 
@@ -201,6 +201,47 @@ const GraphSelectionContext = createContext<SelectionContextValue | undefined>(u
 export function GraphSelectionProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  // Use useCallback for stable dispatch wrappers - these never change
+  const select = useCallback((payload: SelectPayload) => {
+    dispatch({ type: "select", payload });
+  }, []);
+
+  const toggleDetail = useCallback((type: SelectionKind, id: string) => {
+    dispatch({ type: "toggle-detail", payload: { type, id } });
+  }, []);
+
+  const openDetail = useCallback((type: SelectionKind, id: string) => {
+    dispatch({ type: "open-detail", payload: { type, id } });
+  }, []);
+
+  const openAggregateDetail = useCallback(() => {
+    dispatch({ type: "open-aggregate" });
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    dispatch({ type: "close-detail" });
+  }, []);
+
+  const rememberClick = useCallback((type: SelectionKind, id: string) => {
+    dispatch({ type: "remember-click", payload: { type, id } });
+  }, []);
+
+  const clear = useCallback(() => {
+    dispatch({ type: "clear" });
+  }, []);
+
+  // Memoize totals object based only on array lengths
+  const totals = useMemo(
+    () => ({
+      courseCount: state.courses.length,
+      containerCount: state.containers.length,
+    }),
+    [state.courses.length, state.containers.length]
+  );
+
+  // CRITICAL FIX: Only recreate context value when arrays actually change reference
+  // The reducer ensures state.courses/containers/edges only change when content changes
+  // Callbacks are stable (useCallback with []), so they don't cause re-renders
   const value = useMemo<SelectionContextValue>(
     () => ({
       courses: state.courses,
@@ -209,19 +250,31 @@ export function GraphSelectionProvider({ children }: { children: React.ReactNode
       isDetailOpen: state.isDetailOpen,
       detailTarget: state.detailTarget,
       lastClicked: state.lastClicked,
-      totals: {
-        courseCount: state.courses.length,
-        containerCount: state.containers.length,
-      },
-      select: (payload) => dispatch({ type: "select", payload }),
-      toggleDetail: (type, id) => dispatch({ type: "toggle-detail", payload: { type, id } }),
-      openDetail: (type, id) => dispatch({ type: "open-detail", payload: { type, id } }),
-      openAggregateDetail: () => dispatch({ type: "open-aggregate" }),
-      closeDetail: () => dispatch({ type: "close-detail" }),
-      rememberClick: (type, id) => dispatch({ type: "remember-click", payload: { type, id } }),
-      clear: () => dispatch({ type: "clear" }),
+      totals,
+      select,
+      toggleDetail,
+      openDetail,
+      openAggregateDetail,
+      closeDetail,
+      rememberClick,
+      clear,
     }),
-    [state]
+    [
+      state.courses,
+      state.containers,
+      state.edges,
+      state.isDetailOpen,
+      state.detailTarget,
+      state.lastClicked,
+      totals,
+      select,
+      toggleDetail,
+      openDetail,
+      openAggregateDetail,
+      closeDetail,
+      rememberClick,
+      clear,
+    ]
   );
 
   return <GraphSelectionContext.Provider value={value}>{children}</GraphSelectionContext.Provider>;

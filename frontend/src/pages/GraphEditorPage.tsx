@@ -690,6 +690,25 @@ function GraphEditorPageInner() {
     [openSelectionDetail]
   );
 
+  // Store refs for callbacks used in node data to avoid effect re-runs (#13)
+  const openInspectorForCourseRef = useRef(openInspectorForCourse);
+  const openInspectorForContainerRef = useRef(openInspectorForContainer);
+  
+  useEffect(() => {
+    openInspectorForCourseRef.current = openInspectorForCourse;
+    openInspectorForContainerRef.current = openInspectorForContainer;
+  }, [openInspectorForCourse, openInspectorForContainer]);
+
+  // Create stable callback references that don't change on every render (#13)
+  const stableOpenInspectorForCourse = useMemo(
+    () => (id: string) => openInspectorForCourseRef.current(id),
+    []
+  );
+  const stableOpenInspectorForContainer = useMemo(
+    () => (id: string) => openInspectorForContainerRef.current(id),
+    []
+  );
+
   const closeInspector = useCallback(() => {
     setIsMenuOpen(false);
     clearSelection();
@@ -966,11 +985,26 @@ function GraphEditorPageInner() {
     [graphId, submitImportPayload]
   );
 
+  // Main graph rebuild effect (#13)
+  // CRITICAL LESSON LEARNED: Avoid unstable dependencies in useEffect!
+  //
+  // This effect had an infinite loop bug caused by including unstable dependencies:
+  // 1. setNodes/setEdges from React Flow - recreated on every render
+  // 2. persistAssignmentsSafe - depends on updateGraphMutation which changes
+  //
+  // Calling setState inside useEffect when the setter is in the dependency array
+  // creates a loop: effect → setState → re-render → new setter → effect fires again
+  //
+  // Solution: Only include stable dependencies. Use refs for values that don't need
+  // to trigger re-runs, and omit functions that are only used conditionally.
   useEffect(() => {
     const detail = detailQuery.data;
     if (!detail) {
-      setNodes([]);
-      setEdges([]);
+      // Only clear if graph is not already empty to avoid triggering re-renders
+      if (nodesRef.current.length > 0) {
+        updateNodesWithMap(() => []);
+        setEdges([]);
+      }
       lastDetailTimestampRef.current = detailQuery.dataUpdatedAt ?? Date.now();
       return;
     }
@@ -981,8 +1015,6 @@ function GraphEditorPageInner() {
       return;
     }
     lastDetailTimestampRef.current = dataTimestamp;
-
-    console.log("[#13] Full graph rebuild triggered"); // TODO: Remove after testing
 
     // GRAPH REBUILD STRATEGY (#13):
     // This effect rebuilds ALL nodes/edges when the cache timestamp changes.
@@ -1017,8 +1049,19 @@ function GraphEditorPageInner() {
       }
     }
 
-    setCourseAssignments(sanitizedAssignments);
+    // CRITICAL: Update ref first, then check if state update is needed
+    // This prevents infinite loops while keeping UI in sync
+    const previousAssignmentsJson = JSON.stringify(assignmentsRef.current);
+    const sanitizedAssignmentsJson = JSON.stringify(sanitizedAssignments);
+    const assignmentsChanged = previousAssignmentsJson !== sanitizedAssignmentsJson;
+    
     assignmentsRef.current = sanitizedAssignments;
+
+    // Only update state if assignments actually changed
+    // This prevents unnecessary re-renders and infinite loops
+    if (assignmentsChanged) {
+      setCourseAssignments(sanitizedAssignments);
+    }
 
     // If we cleaned up any assignments, persist the sanitized version
     if (Object.keys(remoteAssignments).length !== Object.keys(sanitizedAssignments).length) {
@@ -1061,7 +1104,7 @@ function GraphEditorPageInner() {
         data: {
           kind: "container" as const,
           container: normalized,
-          onSelect: openInspectorForContainer,
+          onSelect: stableOpenInspectorForContainer, // Stable ref (#13)
           courseCount: assignedCourseIds.length,
           // Removed grid data - no longer using grid layout
         },
@@ -1112,7 +1155,7 @@ function GraphEditorPageInner() {
             kind: "course",
             course,
             hasUnmetPrereqs,
-            onSelect: openInspectorForCourse,
+            onSelect: stableOpenInspectorForCourse, // Stable ref (#13)
           },
           parentNode: parent,
           // Removed: extent: "parent" - allows free positioning even within containers
@@ -1139,7 +1182,7 @@ function GraphEditorPageInner() {
           kind: "course",
           course,
           hasUnmetPrereqs,
-          onSelect: openInspectorForCourse,
+          onSelect: stableOpenInspectorForCourse, // Stable ref (#13)
         },
         style: { zIndex: 1 },
         draggable: true,
@@ -1171,7 +1214,7 @@ function GraphEditorPageInner() {
     });
 
     const nextNodes = [...containerNodes, ...courseNodes];
-    setNodes(nextNodes);
+    updateNodesWithMap(() => nextNodes);
     setEdges(edgesList);
 
     // Update nodesMapRef for O(1) lookups
@@ -1182,18 +1225,20 @@ function GraphEditorPageInner() {
     historyRef.current = [];
     futureRef.current = [];
     pushHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    // courseAssignments intentionally omitted - we use assignmentsRef to avoid loops
+    // setNodes/setEdges intentionally omitted - they're not stable from React Flow (#13)
+    // persistAssignmentsSafe intentionally omitted - depends on unstable updateGraphMutation,
+    //   only used for rare cleanup, safe to use stale version (#13)
     detailQuery.data,
     detailQuery.dataUpdatedAt,
-    openInspectorForContainer,
-    openInspectorForCourse,
     pushHistory,
-    selectedCourseIds,
-    selectedContainerIds,
-    setEdges,
-    setNodes,
+    selectedCourseIds, // Now stable from fixed useGraphSelection provider (#13)
+    selectedContainerIds, // Now stable from fixed useGraphSelection provider (#13)
+    stableOpenInspectorForContainer, // Stable, won't cause re-runs (#13)
+    stableOpenInspectorForCourse, // Stable, won't cause re-runs (#13)
     theme,
-    persistAssignmentsSafe,
   ]);
 
   const handleNodesChange = useCallback(
@@ -1221,6 +1266,19 @@ function GraphEditorPageInner() {
         .map((node) => node.id);
       const edgeIds = params.edges.map((edge) => edge.id);
 
+      // Check if selection actually changed to avoid triggering context updates
+      const selectionChanged =
+        courseIds.length !== selectedCourseIds.length ||
+        containerIds.length !== selectedContainerIds.length ||
+        edgeIds.length !== selectedEdgeIds.length ||
+        courseIds.some((id, i) => id !== selectedCourseIds[i]) ||
+        containerIds.some((id, i) => id !== selectedContainerIds[i]) ||
+        edgeIds.some((id, i) => id !== selectedEdgeIds[i]);
+
+      if (!selectionChanged) {
+        return; // Skip if nothing changed
+      }
+
       if (courseIds.length === 0 && containerIds.length === 0 && edgeIds.length === 0) {
         clearSelection();
         return;
@@ -1232,7 +1290,7 @@ function GraphEditorPageInner() {
         edges: edgeIds,
       });
     },
-    [applySelection, clearSelection]
+    [applySelection, clearSelection, selectedCourseIds, selectedContainerIds, selectedEdgeIds]
   );
 
   const reactFlowToolbarActions = useMemo(
