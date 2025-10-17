@@ -565,6 +565,7 @@ function GraphEditorPageInner() {
   // Updates a single node's data without rebuilding the entire graph
   const updateSingleNode = useCallback(
     (nodeId: string, updater: (node: Node<EditorNodeData>) => Node<EditorNodeData>) => {
+      console.log("[#13] Incremental update for node:", nodeId); // TODO: Remove after testing
       updateNodesWithMap((prev) => prev.map((node) => (node.id === nodeId ? updater(node) : node)));
     },
     [updateNodesWithMap]
@@ -984,6 +985,8 @@ function GraphEditorPageInner() {
       return;
     }
     lastDetailTimestampRef.current = dataTimestamp;
+
+    console.log("[#13] Full graph rebuild triggered"); // TODO: Remove after testing
 
     // GRAPH REBUILD STRATEGY (#13):
     // This effect rebuilds ALL nodes/edges when the cache timestamp changes.
