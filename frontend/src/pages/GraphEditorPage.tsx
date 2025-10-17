@@ -1634,13 +1634,54 @@ function GraphEditorPageInner() {
   );
 
   const handleDeleteSelection = useCallback(async () => {
+    loading.start(LoadingOperations.DELETE_NODES);
+    
     const selectedNodes = nodesRef.current.filter((node) => node.selected);
+    const courseNodesToDelete = selectedNodes.filter((node) => node.type === "course");
+    const containerNodesToDelete = selectedNodes.filter((node) => node.type === "container");
+    
+    // Save state for rollback
+    const previousAssignments = { ...courseAssignments };
+    const previousNodes = [...nodesRef.current];
+    const previousEdges = [...edgesRef.current];
+    
     let removedContainer = false;
     let deletedCount = 0;
     let failedCount = 0;
 
-    for (const node of selectedNodes) {
-      if (node.type === "course") {
+    // Optimistic update: Remove from cache immediately
+    if (courseNodesToDelete.length > 0) {
+      const courseIdsToDelete = courseNodesToDelete.map((node) => node.id);
+      updateGraphCache((draft) => {
+        draft.courses = draft.courses.filter((c) => !courseIdsToDelete.includes(c.id));
+      });
+    }
+
+    // Remove containers from UI immediately
+    for (const node of containerNodesToDelete) {
+      const containerId = node.id;
+      setCourseAssignments((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((courseId) => {
+          if (next[courseId] === containerId) {
+            delete next[courseId];
+          }
+        });
+        void persistAssignmentsSafe(next);
+        return next;
+      });
+      updateNodesWithMap((nds) => nds.filter((candidate) => candidate.id !== containerId));
+      removedContainer = true;
+    }
+
+    // Remove edges immediately
+    if (selectedEdgeIds.length > 0) {
+      setEdges((eds) => eds.filter((edge) => !selectedEdgeIds.includes(edge.id)));
+    }
+
+    try {
+      // Actually delete courses from backend
+      for (const node of courseNodesToDelete) {
         try {
           await deleteCourseMutation.mutateAsync(node.id);
           deletedCount++;
@@ -1649,51 +1690,78 @@ function GraphEditorPageInner() {
           failedCount++;
         }
       }
-      if (node.type === "container") {
-        const containerId = node.id;
-        setCourseAssignments((prev) => {
-          const next = { ...prev };
-          Object.keys(next).forEach((courseId) => {
-            if (next[courseId] === containerId) {
-              delete next[courseId];
+
+      // Delete edges
+      if (selectedEdgeIds.length > 0) {
+        const edgesToDelete = previousEdges.filter((edge) => selectedEdgeIds.includes(edge.id));
+        await handleEdgesDelete(edgesToDelete);
+      }
+
+      closeInspector();
+
+      // Show feedback to user
+      const totalDeleted = deletedCount + containerNodesToDelete.length;
+      if (totalDeleted > 0 && failedCount === 0) {
+        toast.success(
+          `Deleted ${totalDeleted} ${totalDeleted === 1 ? "item" : "items"} successfully`
+        );
+      } else if (failedCount > 0) {
+        toast.error(
+          `Failed to delete ${failedCount} ${failedCount === 1 ? "item" : "items"}. Rolling back changes.`,
+          { duration: 5000 }
+        );
+        
+        // Rollback on error
+        updateGraphCache((draft) => {
+          const currentCourseIds = new Set(draft.courses.map((c) => c.id));
+          const deletedCourses = courseNodesToDelete
+            .map((node) => detailQuery.data?.courses.find((c) => c.id === node.id))
+            .filter(Boolean);
+
+          deletedCourses.forEach((course) => {
+            if (!currentCourseIds.has(course!.id)) {
+              draft.courses.push(course!);
             }
           });
-          void persistAssignmentsSafe(next);
-          return next;
         });
-        updateNodesWithMap((nds) => nds.filter((candidate) => candidate.id !== containerId));
-        removedContainer = true;
+        setCourseAssignments(previousAssignments);
+        updateNodesWithMap(() => previousNodes);
+        setEdges(() => previousEdges);
       }
-    }
-    if (selectedNodes.some((node) => node.type === "course")) {
-      detailQuery.refetch();
-    }
-    if (selectedEdgeIds.length > 0) {
-      const edgesToDelete = edgesRef.current.filter((edge) => selectedEdgeIds.includes(edge.id));
-      await handleEdgesDelete(edgesToDelete);
-      setEdges((eds) => eds.filter((edge) => !selectedEdgeIds.includes(edge.id)));
-    }
-    closeInspector();
 
-    // Show feedback to user
-    if (deletedCount > 0 && failedCount === 0) {
-      toast.success(
-        `Deleted ${deletedCount} ${deletedCount === 1 ? "item" : "items"} successfully`
-      );
-    } else if (failedCount > 0) {
-      toast.error(
-        `Failed to delete ${failedCount} ${failedCount === 1 ? "item" : "items"}. Please try again.`,
-        { duration: 5000 }
-      );
-    }
+      setTimeout(() => {
+        pushHistory();
+        if (removedContainer) {
+          scheduleContainerPersistence();
+        }
+      }, 0);
+    } catch (error) {
+      console.error("Deletion failed:", error);
+      toast.error("Failed to delete items. Rolling back changes.", { duration: 5000 });
+      
+      // Rollback all changes
+      updateGraphCache((draft) => {
+        const currentCourseIds = new Set(draft.courses.map((c) => c.id));
+        const deletedCourses = courseNodesToDelete
+          .map((node) => detailQuery.data?.courses.find((c) => c.id === node.id))
+          .filter(Boolean);
 
-    setTimeout(() => {
-      pushHistory();
-      if (removedContainer) {
-        scheduleContainerPersistence();
-      }
-    }, 0);
+        deletedCourses.forEach((course) => {
+          if (!currentCourseIds.has(course!.id)) {
+            draft.courses.push(course!);
+          }
+        });
+      });
+      setCourseAssignments(previousAssignments);
+      updateNodesWithMap(() => previousNodes);
+      setEdges(() => previousEdges);
+    } finally {
+      loading.stop(LoadingOperations.DELETE_NODES);
+    }
   }, [
+    loading,
+    courseAssignments,
+    updateGraphCache,
     closeInspector,
     deleteCourseMutation,
     detailQuery,
@@ -1826,6 +1894,7 @@ function GraphEditorPageInner() {
       // Optimistic update: Add course immediately to cache (#11)
       const optimisticCourse: CourseDetail = {
         id: tempId,
+        graph_id: graphId!,
         code,
         title,
         credits: Math.round(creditsValue),
@@ -1837,6 +1906,8 @@ function GraphEditorPageInner() {
         position_x: 100,
         position_y: 100,
         grade: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       updateGraphCache((draft) => {
@@ -1858,7 +1929,7 @@ function GraphEditorPageInner() {
         updateGraphCache((draft) => {
           const index = draft.courses.findIndex((c) => c.id === tempId);
           if (index !== -1) {
-            draft.courses[index] = realCourse;
+            draft.courses[index] = realCourse as CourseDetail;
           }
         });
 
@@ -2034,6 +2105,8 @@ function GraphEditorPageInner() {
       onChange={handleAssignContainer}
       containerOptions={containerOptions}
       onClose={closeInspector}
+      loading={loading}
+      updateGraphCache={updateGraphCache}
     />
   ) : selectedContainer ? (
     <ContainerSidePanel
@@ -2190,8 +2263,9 @@ function GraphEditorPageInner() {
       },
     });
     menuItems.push({
-      label: "Delete selection",
+      label: loading.is(LoadingOperations.DELETE_NODES) ? "Deleting..." : "Delete selection",
       action: () => {
+        if (loading.is(LoadingOperations.DELETE_NODES)) return;
         void handleDeleteSelection().finally(() => {
           setIsMenuOpen(false);
           closeSelectionDetail();
@@ -2208,8 +2282,9 @@ function GraphEditorPageInner() {
       },
     });
     menuItems.push({
-      label: "Delete course",
+      label: loading.is(LoadingOperations.DELETE_NODES) ? "Deleting..." : "Delete course",
       action: () => {
+        if (loading.is(LoadingOperations.DELETE_NODES)) return;
         void handleDeleteSelection().finally(() => {
           setIsMenuOpen(false);
           closeSelectionDetail();
@@ -2226,8 +2301,9 @@ function GraphEditorPageInner() {
       },
     });
     menuItems.push({
-      label: "Delete container",
+      label: loading.is(LoadingOperations.DELETE_NODES) ? "Deleting..." : "Delete container",
       action: () => {
+        if (loading.is(LoadingOperations.DELETE_NODES)) return;
         void handleDeleteSelection().finally(() => {
           setIsMenuOpen(false);
           closeSelectionDetail();
@@ -3326,6 +3402,8 @@ type CourseSidePanelProps = {
   containerOptions: { id: string; title: string }[];
   onChange: (courseId: string, containerId: string | "") => void;
   onClose: () => void;
+  loading: ReturnType<typeof useLoadingState>;
+  updateGraphCache: (updater: (draft: GraphDetail) => void) => () => void;
 };
 
 function CourseSidePanel({
@@ -3334,6 +3412,8 @@ function CourseSidePanel({
   containerOptions,
   onChange,
   onClose,
+  loading,
+  updateGraphCache,
 }: CourseSidePanelProps) {
   const { graphId } = useParams<{ graphId: string }>();
   const updateCourseMutation = useUpdateCourseMutation(graphId ?? "");
@@ -3371,20 +3451,50 @@ function CourseSidePanel({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    try {
-      const creditsValue = Number(formState.credits);
-      const updatePayload: Record<string, unknown> = {
-        title: formState.title,
-        code: formState.code,
-        term: formState.term || null,
-        status: formState.status,
-        notes: formState.notes || null,
-        is_pass_fail: formState.is_pass_fail,
-        grade: formState.grade ? formState.grade : null,
-      };
-      if (Number.isFinite(creditsValue) && creditsValue >= 0) {
-        updatePayload.credits = Math.round(creditsValue);
+
+    // Start loading (#11)
+    loading.start(LoadingOperations.UPDATE_COURSE);
+
+    // Prepare update payload
+    const creditsValue = Number(formState.credits);
+    const updatePayload: Record<string, unknown> = {
+      title: formState.title,
+      code: formState.code,
+      term: formState.term || null,
+      status: formState.status,
+      notes: formState.notes || null,
+      is_pass_fail: formState.is_pass_fail,
+      grade: formState.grade ? formState.grade : null,
+    };
+    if (Number.isFinite(creditsValue) && creditsValue >= 0) {
+      updatePayload.credits = Math.round(creditsValue);
+    }
+
+    // Save previous state for rollback (#11)
+    const previousCourse = { ...course };
+
+    // Optimistic update: Update cache immediately (#11)
+    updateGraphCache((draft) => {
+      const courseIndex = draft.courses.findIndex((c) => c.id === course.id);
+      if (courseIndex !== -1) {
+        draft.courses[courseIndex] = {
+          ...draft.courses[courseIndex],
+          title: formState.title,
+          code: formState.code,
+          term: formState.term || null,
+          status: formState.status,
+          notes: formState.notes || null,
+          is_pass_fail: formState.is_pass_fail,
+          grade: formState.grade ? formState.grade : null,
+          credits:
+            Number.isFinite(creditsValue) && creditsValue >= 0
+              ? Math.round(creditsValue)
+              : draft.courses[courseIndex].credits,
+        };
       }
+    });
+
+    try {
       await updateCourseMutation.mutateAsync({
         courseId: course.id,
         data: updatePayload,
@@ -3393,9 +3503,21 @@ function CourseSidePanel({
       onClose();
     } catch (error) {
       console.error("Failed to update course", error);
+
+      // Rollback optimistic update on error (#11)
+      updateGraphCache((draft) => {
+        const courseIndex = draft.courses.findIndex((c) => c.id === course.id);
+        if (courseIndex !== -1) {
+          draft.courses[courseIndex] = previousCourse;
+        }
+      });
+
       toast.error("Failed to update course. Please try again.", {
         duration: 5000,
       });
+    } finally {
+      // Stop loading (#11)
+      loading.stop(LoadingOperations.UPDATE_COURSE);
     }
   };
 
@@ -3542,10 +3664,11 @@ function CourseSidePanel({
 
       <button
         type="submit"
-        disabled={updateCourseMutation.isPending}
-        className="mt-auto rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={loading.is(LoadingOperations.UPDATE_COURSE)}
+        className="mt-auto rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2"
       >
-        {updateCourseMutation.isPending ? "Saving…" : "Save changes"}
+        {loading.is(LoadingOperations.UPDATE_COURSE) && <InlineSpinner size={16} />}
+        {loading.is(LoadingOperations.UPDATE_COURSE) ? "Saving…" : "Save changes"}
       </button>
     </form>
   );
