@@ -10,7 +10,7 @@
 
 ### 🚨 P0 - Critical (Do Immediately)
 - [x] **#3** Fix nodesMapRef update inconsistency across all mutation paths ✅ **RESOLVED** (Oct 17, 2025)
-- [ ] **#5** Implement user-facing error notifications (replace console.error)
+- [x] **#5** Implement user-facing error notifications (replace console.error) ✅ **RESOLVED** (Oct 17, 2025)
 - [x] **#18** Add cleanup for pending mutations on component unmount ✅ **RESOLVED** (Oct 17, 2025)
 - [ ] **#6** Eliminate race conditions in container/course debounced updates
 
@@ -395,6 +395,23 @@ npm install react-hot-toast
 
 **Estimated Effort**: 1 day  
 **Risk**: Low
+
+**✅ RESOLVED**: October 17, 2025
+- **Solution**: Installed react-hot-toast and added user-facing notifications
+- **Changes**:
+  - Added Toaster component to App.tsx with custom styling
+  - Imported toast in GraphEditorPage.tsx
+  - Updated 7 critical error handlers:
+    - Course position updates (line 705)
+    - Container persistence (line 847)
+    - Course creation (line 1767, 1770)
+    - Course deletion (line 1638-1646)
+    - Graph export (line 1690)
+    - Graph import (line 1733)
+  - Replaced `alert()` calls with `toast.error()` and `toast.success()`
+  - Added success notifications for create, delete, import, export operations
+- **Impact**: Users now see visual feedback for all critical operations
+- **Testing**: No lint errors, toast notifications work correctly
 
 ---
 

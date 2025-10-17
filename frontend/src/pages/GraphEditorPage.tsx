@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
+import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactFlow, {
   Background,
@@ -702,7 +703,9 @@ function GraphEditorPageInner() {
           })
           .catch((error) => {
             console.error(`Failed to update course ${courseId} position`, error);
-            // TODO: Show user-facing error notification
+            toast.error("Failed to save course position. Changes may be lost.", {
+              duration: 5000,
+            });
             // Rollback: The cache wasn't updated optimistically, so no rollback needed
             // But we should refetch to ensure consistency
             void detailQuery.refetch();
@@ -841,6 +844,9 @@ function GraphEditorPageInner() {
         await updateGraphMutation.mutateAsync({ containers: serialized });
       } catch (error) {
         console.error("Failed to persist containers", error);
+        toast.error("Failed to save container changes. Please try again.", {
+          duration: 5000,
+        });
         rollback();
         throw error;
       }
@@ -918,6 +924,7 @@ function GraphEditorPageInner() {
           courses,
         };
         await submitImportPayload(payload);
+        toast.success("Sample graph loaded successfully");
       } catch (error) {
         if (error && typeof error === "object" && "response" in error) {
           const response = (error as { response: Response }).response;
@@ -930,7 +937,9 @@ function GraphEditorPageInner() {
         } else {
           console.error("Failed to apply sample graph", error);
         }
-        alert("Unable to load sample graph. Please try again.");
+        toast.error("Unable to load sample graph. Please try again.", {
+          duration: 5000,
+        });
       } finally {
         setIsImporting(false);
       }
@@ -1198,7 +1207,10 @@ function GraphEditorPageInner() {
   const reactFlowToolbarActions = useMemo(
     () => ({
       undo: () => {
-        if (historyRef.current.length === 0) return;
+        if (historyRef.current.length === 0) {
+          toast("No more actions to undo", { duration: 2000 });
+          return;
+        }
         const previous = historyRef.current[historyRef.current.length - 1];
         futureRef.current = [
           {
@@ -1218,13 +1230,18 @@ function GraphEditorPageInner() {
         previous.nodes.forEach((node) => nextNodesMap.set(node.id, node));
         nodesMapRef.current = nextNodesMap;
 
+        toast.success("Action undone", { duration: 2000 });
+
         setTimeout(() => {
           void persistAssignmentsSafe(previous.assignments);
           scheduleContainerPersistence();
         }, 0);
       },
       redo: () => {
-        if (futureRef.current.length === 0) return;
+        if (futureRef.current.length === 0) {
+          toast("No more actions to redo", { duration: 2000 });
+          return;
+        }
         const next = futureRef.current[0];
         historyRef.current = [
           ...historyRef.current,
@@ -1243,6 +1260,8 @@ function GraphEditorPageInner() {
         const nextNodesMap = new Map<string, Node<EditorNodeData>>();
         next.nodes.forEach((node) => nextNodesMap.set(node.id, node));
         nodesMapRef.current = nextNodesMap;
+
+        toast.success("Action redone", { duration: 2000 });
 
         setTimeout(() => {
           void persistAssignmentsSafe(next.assignments);
@@ -1428,8 +1447,10 @@ function GraphEditorPageInner() {
           prerequisites: nextPrereqs,
         });
         setTimeout(() => pushHistory(), 0);
+        toast.success("Prerequisite added");
       } catch (error) {
         console.error("Failed to add prerequisite", error);
+        toast.error("Failed to add prerequisite");
         setEdges((eds) =>
           eds.filter((edge) => edge.id !== `${connection.source}->${connection.target}`)
         );
@@ -1454,10 +1475,19 @@ function GraphEditorPageInner() {
           });
         } catch (error) {
           console.error("Failed to remove prerequisite", error);
+          toast.error("Failed to remove prerequisite");
         }
       });
       await Promise.all(tasks);
       setTimeout(() => pushHistory(), 0);
+      
+      if (edgesToDelete.length > 0) {
+        toast.success(
+          edgesToDelete.length === 1
+            ? "Prerequisite removed"
+            : `${edgesToDelete.length} prerequisites removed`
+        );
+      }
     },
     [detailQuery.data?.courses, pushHistory, updatePrerequisitesMutation]
   );
@@ -1546,6 +1576,8 @@ function GraphEditorPageInner() {
       pushHistory();
       scheduleContainerPersistence();
     }, 0);
+    
+    toast.success(`Created ${container.title}`);
   }, [
     openInspectorForContainer,
     pushHistory,
@@ -1590,12 +1622,17 @@ function GraphEditorPageInner() {
   const handleDeleteSelection = useCallback(async () => {
     const selectedNodes = nodesRef.current.filter((node) => node.selected);
     let removedContainer = false;
+    let deletedCount = 0;
+    let failedCount = 0;
+
     for (const node of selectedNodes) {
       if (node.type === "course") {
         try {
           await deleteCourseMutation.mutateAsync(node.id);
+          deletedCount++;
         } catch (error) {
           console.error("Failed to delete course", error);
+          failedCount++;
         }
       }
       if (node.type === "container") {
@@ -1623,6 +1660,19 @@ function GraphEditorPageInner() {
       setEdges((eds) => eds.filter((edge) => !selectedEdgeIds.includes(edge.id)));
     }
     closeInspector();
+
+    // Show feedback to user
+    if (deletedCount > 0 && failedCount === 0) {
+      toast.success(
+        `Deleted ${deletedCount} ${deletedCount === 1 ? "item" : "items"} successfully`
+      );
+    } else if (failedCount > 0) {
+      toast.error(
+        `Failed to delete ${failedCount} ${failedCount === 1 ? "item" : "items"}. Please try again.`,
+        { duration: 5000 }
+      );
+    }
+
     setTimeout(() => {
       pushHistory();
       if (removedContainer) {
@@ -1664,9 +1714,12 @@ function GraphEditorPageInner() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      toast.success("Graph exported successfully");
     } catch (error) {
       console.error("Failed to export graph", error);
-      alert("Unable to export graph. Please try again.");
+      toast.error("Failed to export graph. Please try again.", {
+        duration: 5000,
+      });
     } finally {
       setIsExporting(false);
     }
@@ -1702,9 +1755,12 @@ function GraphEditorPageInner() {
         };
 
         await submitImportPayload(payload);
+        toast.success("Graph imported successfully");
       } catch (error) {
         console.error("Failed to import graph", error);
-        alert("Import failed. Ensure the file was exported from Course Atlas and try again.");
+        toast.error("Import failed. Ensure the file was exported from Course Atlas.", {
+          duration: 5000,
+        });
       } finally {
         setIsImporting(false);
       }
@@ -1738,12 +1794,12 @@ function GraphEditorPageInner() {
       const code = data.code.trim();
       const title = data.title.trim();
       if (!code || !title) {
-        alert("Course code and title are required.");
+        toast.error("Course code and title are required.", { duration: 3000 });
         return;
       }
       const creditsValue = Number(data.credits);
       if (!Number.isFinite(creditsValue) || creditsValue <= 0) {
-        alert("Credits must be a positive number.");
+        toast.error("Credits must be a positive number.", { duration: 3000 });
         return;
       }
       try {
@@ -1756,10 +1812,13 @@ function GraphEditorPageInner() {
           is_pass_fail: data.is_pass_fail,
           notes: data.notes.trim() ? data.notes.trim() : null,
         });
+        toast.success("Course created successfully");
         setIsAddCourseOpen(false);
       } catch (error) {
         console.error("Failed to create course", error);
-        alert("Unable to create course. Please try again.");
+        toast.error("Failed to create course. Please try again.", {
+          duration: 5000,
+        });
       }
     },
     [createCourseMutation, graphId]
@@ -3270,9 +3329,13 @@ function CourseSidePanel({
         courseId: course.id,
         data: updatePayload,
       });
+      toast.success("Course updated successfully");
       onClose();
     } catch (error) {
       console.error("Failed to update course", error);
+      toast.error("Failed to update course. Please try again.", {
+        duration: 5000,
+      });
     }
   };
 
