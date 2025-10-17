@@ -91,16 +91,19 @@ Incremental node updates for course data changes (title, code, status, credits, 
 
 ### Test 5: Update Then Undo
 
-**Steps**:
-1. Select a course and note its current title
-2. Change the title and submit
-3. Wait for success toast
-4. Press Ctrl+Z (or Cmd+Z) to undo
+**Status**: ⏭️ **SKIPPED** - Undo/redo system removed (see commit 50933cc)
 
-**Expected Results**:
-- ✅ Undo should work correctly
-- ✅ Node reverts to previous title
-- ⚠️ **Note**: This might trigger a full rebuild (undo system)
+**Reason**:
+- Undo/redo system was fundamentally broken
+- Didn't track course/container data updates
+- Only captured partial state (nodes/edges, not React Query cache)
+- Removed completely for clean slate future implementation
+- See GRAPH_EDITOR_ISSUES.md for future server-side undo design
+
+**Future Enhancement**:
+- Server-side undo with mutation history tracking
+- Proper state restoration across all data layers
+- Survives page refresh, works across devices
 
 ---
 
@@ -208,8 +211,8 @@ Incremental node updates for course data changes (title, code, status, credits, 
 | 2. Status Update | ✅ | ☐ | Badge/color updates instantly |
 | 3. Code Update | ☐ | ☐ | Not tested |
 | 4. Multiple Fields | ✅ | ☐ | All fields update instantly |
-| 5. Undo | ☐ | ☐ | Not tested |
-| 6. Rapid Updates | ☐ | ☐ | Not tested |
+| 5. Undo | ⏭️ | ☐ | SKIPPED - Feature removed (commit 50933cc) |
+| 6. Rapid Updates | ☐ | ☐ | Ready to test |
 | 7. Error Handling | ☐ | ☐ | Not tested |
 
 **Overall Result**: ✅ PASS (Core Functionality) | ☐ FAIL | ☐ NEEDS FIXES
