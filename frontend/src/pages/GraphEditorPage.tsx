@@ -545,6 +545,32 @@ function GraphEditorPageInner() {
     [updateNodesWithMap]
   );
 
+  // Helper function for incremental container updates (#13 Phase 2)
+  // Updates a single container's data without rebuilding the entire graph
+  const updateSingleContainer = useCallback(
+    (containerId: string, updates: Partial<ContainerShape>) => {
+      console.log("[#13] Incremental update for container:", containerId, updates); // TODO: Remove after testing
+      updateNodesWithMap((prev) =>
+        prev.map((node) => {
+          if (node.id === containerId && node.data.kind === "container") {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                container: {
+                  ...node.data.container,
+                  ...updates,
+                },
+              },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [updateNodesWithMap]
+  );
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -2062,6 +2088,7 @@ function GraphEditorPageInner() {
       theme={theme}
       onChange={handleUpdateContainer}
       onClose={closeInspector}
+      updateSingleContainer={updateSingleContainer}
     />
   ) : (
     placeholderPanel
@@ -3654,6 +3681,7 @@ type ContainerSidePanelProps = {
   onChange: (containerId: string, updates: Partial<ContainerShape>) => void;
   onClose: () => void;
   theme: ThemeMode;
+  updateSingleContainer: (containerId: string, updates: Partial<ContainerShape>) => void;
 };
 
 type MemberChipProps = {
@@ -3710,6 +3738,7 @@ function ContainerSidePanel({
   onChange,
   onClose,
   theme,
+  updateSingleContainer,
 }: ContainerSidePanelProps) {
   const [title, setTitle] = useState(container.title);
   const [paletteId, setPaletteId] = useState<string | null>(container.palette_id ?? null);
@@ -3721,14 +3750,25 @@ function ContainerSidePanel({
 
   const handlePaletteSelect = (nextPaletteId: string | null) => {
     setPaletteId(nextPaletteId);
-    onChange(container.id, {
+    const updates = {
       palette_id: nextPaletteId ?? null,
       color: storedContainerColor(nextPaletteId, container.color),
-    });
+    };
+    
+    // Incremental update: Update the container node immediately (#13 Phase 2)
+    updateSingleContainer(container.id, updates);
+    
+    // Persist to backend
+    onChange(container.id, updates);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    // Incremental update: Update the container node immediately (#13 Phase 2)
+    updateSingleContainer(container.id, { title });
+    
+    // Persist to backend
     onChange(container.id, { title });
     onClose();
   };
