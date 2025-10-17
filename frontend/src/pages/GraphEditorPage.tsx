@@ -115,12 +115,6 @@ function resolveCourseStatusKey(course: CourseDetail, hasUnmetPrereqs: boolean):
   return "planned";
 }
 
-type HistoryEntry = {
-  nodes: Node<EditorNodeData>[];
-  edges: Edge[];
-  assignments: Record<string, string>;
-};
-
 // Removed: ContainerLayoutState and layOutCoursesInContainer - grid layout system removed
 // Courses now position freely, even within containers
 
@@ -424,19 +418,6 @@ function generateUuid() {
   });
 }
 
-function cloneNodes(nodes: Node<EditorNodeData>[]): Node<EditorNodeData>[] {
-  return nodes.map((node) => ({
-    ...node,
-    data: { ...node.data },
-    position: { ...node.position },
-    style: node.style ? { ...node.style } : undefined,
-  }));
-}
-
-function cloneEdges(edges: Edge[]): Edge[] {
-  return edges.map((edge) => ({ ...edge }));
-}
-
 function GraphEditorPageInner() {
   const { graphId } = useParams<{ graphId: string }>();
   const navigate = useNavigate();
@@ -499,9 +480,6 @@ function GraphEditorPageInner() {
   } = selection;
 
   const [courseAssignments, setCourseAssignments] = useState<Record<string, string>>({});
-
-  const historyRef = useRef<HistoryEntry[]>([]);
-  const futureRef = useRef<HistoryEntry[]>([]);
 
   const nodesRef = useRef<Node<EditorNodeData>[]>([]);
   const edgesRef = useRef<Edge[]>([]);
@@ -779,16 +757,6 @@ function GraphEditorPageInner() {
       setIsMenuOpen(false);
     }
   }, [selectedCourseIds.length, selectedContainerIds.length, selectedEdgeIds.length]);
-
-  const pushHistory = useCallback(() => {
-    const snapshot: HistoryEntry = {
-      nodes: cloneNodes(nodesRef.current),
-      edges: cloneEdges(edgesRef.current),
-      assignments: { ...assignmentsRef.current },
-    };
-    historyRef.current = [...historyRef.current.slice(-19), snapshot];
-    futureRef.current = [];
-  }, []);
 
   const lastDetailTimestampRef = useRef<number>(-1);
 
@@ -1222,9 +1190,6 @@ function GraphEditorPageInner() {
     nextNodes.forEach((node) => nextNodesMap.set(node.id, node));
     nodesMapRef.current = nextNodesMap;
 
-    historyRef.current = [];
-    futureRef.current = [];
-    pushHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     // courseAssignments intentionally omitted - we use assignmentsRef to avoid loops
@@ -1233,7 +1198,6 @@ function GraphEditorPageInner() {
     //   only used for rare cleanup, safe to use stale version (#13)
     detailQuery.data,
     detailQuery.dataUpdatedAt,
-    pushHistory,
     selectedCourseIds, // Now stable from fixed useGraphSelection provider (#13)
     selectedContainerIds, // Now stable from fixed useGraphSelection provider (#13)
     stableOpenInspectorForContainer, // Stable, won't cause re-runs (#13)
@@ -1293,73 +1257,8 @@ function GraphEditorPageInner() {
     [applySelection, clearSelection, selectedCourseIds, selectedContainerIds, selectedEdgeIds]
   );
 
-  const reactFlowToolbarActions = useMemo(
-    () => ({
-      undo: () => {
-        if (historyRef.current.length === 0) {
-          toast("No more actions to undo", { duration: 2000 });
-          return;
-        }
-        const previous = historyRef.current[historyRef.current.length - 1];
-        futureRef.current = [
-          {
-            nodes: cloneNodes(nodesRef.current),
-            edges: cloneEdges(edgesRef.current),
-            assignments: { ...assignmentsRef.current },
-          },
-          ...futureRef.current,
-        ].slice(0, 20);
-        historyRef.current = historyRef.current.slice(0, -1);
-        setCourseAssignments(previous.assignments);
-        setNodes(previous.nodes);
-        setEdges(previous.edges);
-
-        // Sync nodesMapRef
-        const nextNodesMap = new Map<string, Node<EditorNodeData>>();
-        previous.nodes.forEach((node) => nextNodesMap.set(node.id, node));
-        nodesMapRef.current = nextNodesMap;
-
-        toast.success("Action undone", { duration: 2000 });
-
-        setTimeout(() => {
-          void persistAssignmentsSafe(previous.assignments);
-          scheduleContainerPersistence();
-        }, 0);
-      },
-      redo: () => {
-        if (futureRef.current.length === 0) {
-          toast("No more actions to redo", { duration: 2000 });
-          return;
-        }
-        const next = futureRef.current[0];
-        historyRef.current = [
-          ...historyRef.current,
-          {
-            nodes: cloneNodes(nodesRef.current),
-            edges: cloneEdges(edgesRef.current),
-            assignments: { ...assignmentsRef.current },
-          },
-        ].slice(-20);
-        futureRef.current = futureRef.current.slice(1);
-        setCourseAssignments(next.assignments);
-        setNodes(next.nodes);
-        setEdges(next.edges);
-
-        // Sync nodesMapRef
-        const nextNodesMap = new Map<string, Node<EditorNodeData>>();
-        next.nodes.forEach((node) => nextNodesMap.set(node.id, node));
-        nodesMapRef.current = nextNodesMap;
-
-        toast.success("Action redone", { duration: 2000 });
-
-        setTimeout(() => {
-          void persistAssignmentsSafe(next.assignments);
-          scheduleContainerPersistence();
-        }, 0);
-      },
-    }),
-    [persistAssignmentsSafe, scheduleContainerPersistence, setCourseAssignments, setEdges, setNodes]
-  );
+  // Removed: undo/redo system - was fundamentally broken and didn't track all state changes
+  // TODO: Implement proper undo/redo system with server-side history tracking
 
   const handleNodeDrag = useCallback(() => {
     // No collision detection - allow free dragging
@@ -1414,7 +1313,6 @@ function GraphEditorPageInner() {
         });
 
         scheduleContainerPersistence();
-        pushHistory();
         return;
       }
 
@@ -1458,11 +1356,9 @@ function GraphEditorPageInner() {
         // Queue position update for batch processing - reduces backend load
         pendingCourseUpdatesRef.current.set(node.id, absolutePosition);
         scheduleCoursePositionUpdates();
-
-        pushHistory();
       }
     },
-    [pushHistory, scheduleContainerPersistence, scheduleCoursePositionUpdates, updateNodesWithMap]
+    [scheduleContainerPersistence, scheduleCoursePositionUpdates, updateNodesWithMap]
   );
 
   const handleNodeClick = useCallback(
@@ -1531,7 +1427,6 @@ function GraphEditorPageInner() {
           courseId: targetCourse.id,
           prerequisites: nextPrereqs,
         });
-        setTimeout(() => pushHistory(), 0);
         toast.success("Prerequisite added");
       } catch (error) {
         console.error("Failed to add prerequisite", error);
@@ -1541,7 +1436,7 @@ function GraphEditorPageInner() {
         );
       }
     },
-    [detailQuery.data?.courses, pushHistory, setEdges, updatePrerequisitesMutation]
+    [detailQuery.data?.courses, setEdges, updatePrerequisitesMutation]
   );
 
   const handleEdgesDelete = useCallback(
@@ -1564,7 +1459,6 @@ function GraphEditorPageInner() {
         }
       });
       await Promise.all(tasks);
-      setTimeout(() => pushHistory(), 0);
 
       if (edgesToDelete.length > 0) {
         toast.success(
@@ -1574,7 +1468,7 @@ function GraphEditorPageInner() {
         );
       }
     },
-    [detailQuery.data?.courses, pushHistory, updatePrerequisitesMutation]
+    [detailQuery.data?.courses, updatePrerequisitesMutation]
   );
 
   const handleAssignContainer = useCallback(
@@ -1596,7 +1490,6 @@ function GraphEditorPageInner() {
         );
 
         setTimeout(() => {
-          pushHistory();
           scheduleContainerPersistence();
         }, 0);
 
@@ -1605,7 +1498,6 @@ function GraphEditorPageInner() {
     },
     [
       persistAssignmentsSafe,
-      pushHistory,
       reflowAfterAssignment,
       scheduleContainerPersistence,
       updateNodesWithMap,
@@ -1658,18 +1550,11 @@ function GraphEditorPageInner() {
       },
     ]);
     setTimeout(() => {
-      pushHistory();
       scheduleContainerPersistence();
     }, 0);
 
     toast.success(`Created ${container.title}`);
-  }, [
-    openInspectorForContainer,
-    pushHistory,
-    scheduleContainerPersistence,
-    updateNodesWithMap,
-    theme,
-  ]);
+  }, [openInspectorForContainer, scheduleContainerPersistence, updateNodesWithMap, theme]);
 
   const handleUpdateContainer = useCallback(
     (containerId: string, updates: Partial<ContainerShape>) => {
@@ -1697,11 +1582,10 @@ function GraphEditorPageInner() {
         })
       );
       setTimeout(() => {
-        pushHistory();
         scheduleContainerPersistence();
       }, 0);
     },
-    [pushHistory, scheduleContainerPersistence, updateNodesWithMap]
+    [scheduleContainerPersistence, updateNodesWithMap]
   );
 
   const handleDeleteSelection = useCallback(async () => {
@@ -1801,7 +1685,6 @@ function GraphEditorPageInner() {
       }
 
       setTimeout(() => {
-        pushHistory();
         if (removedContainer) {
           scheduleContainerPersistence();
         }
@@ -1838,7 +1721,6 @@ function GraphEditorPageInner() {
     detailQuery,
     handleEdgesDelete,
     persistAssignmentsSafe,
-    pushHistory,
     scheduleContainerPersistence,
     selectedEdgeIds,
     setEdges,
@@ -2036,18 +1918,11 @@ function GraphEditorPageInner() {
         closeSelectionDetail();
         setIsGraphActionsOpen(false);
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        reactFlowToolbarActions.undo();
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") {
-        event.preventDefault();
-        reactFlowToolbarActions.redo();
-      }
+      // Removed: Undo/redo keyboard shortcuts (Cmd+Z, Cmd+Y) - undo system disabled
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeSelectionDetail, handleDeleteSelection, reactFlowToolbarActions]);
+  }, [closeSelectionDetail, handleDeleteSelection]);
 
   const selectedCourse = useMemo(() => {
     if (selectedCourseIds.length !== 1 || selectedContainerIds.length !== 0) return null;
@@ -2462,22 +2337,7 @@ function GraphEditorPageInner() {
           setIsGraphActionsOpen(false);
         },
       },
-      {
-        label: "Undo",
-        disabled: false,
-        action: () => {
-          reactFlowToolbarActions.undo();
-          setIsGraphActionsOpen(false);
-        },
-      },
-      {
-        label: "Redo",
-        disabled: false,
-        action: () => {
-          reactFlowToolbarActions.redo();
-          setIsGraphActionsOpen(false);
-        },
-      },
+      // Removed: Undo/redo menu items - undo system disabled
     ],
     [
       canvasFitViewPadding,
@@ -2489,7 +2349,6 @@ function GraphEditorPageInner() {
       handleResetSmallSample,
       isExporting,
       isImporting,
-      reactFlowToolbarActions,
     ]
   );
 
