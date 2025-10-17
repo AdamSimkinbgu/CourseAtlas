@@ -69,6 +69,7 @@ import {
 import { useLoadingState, LoadingOperations } from "../hooks/useLoadingState";
 import { InlineSpinner } from "../components/Spinner";
 import { GraphEditorSkeleton } from "../components/SkeletonLoader";
+import { toAbsolute, toRelative } from "../utils/coordinates";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ContainerShape } from "../sections/graph-editor/types";
 import {
@@ -610,13 +611,10 @@ function GraphEditorPageInner() {
       const previousContainerNode = findContainerNode(previousParent);
       const nextContainerNode = findContainerNode(nextParent);
 
-      // Calculate current absolute position (without snapping to avoid jumps)
+      // Calculate current absolute position (without snapping to avoid jumps) (#4)
       const absoluteBefore =
         previousParent && previousContainerNode
-          ? {
-              x: previousContainerNode.position.x + originalCourseNode.position.x,
-              y: previousContainerNode.position.y + originalCourseNode.position.y,
-            }
+          ? toAbsolute(originalCourseNode.position, previousContainerNode.position)
           : {
               x: originalCourseNode.position.x,
               y: originalCourseNode.position.y,
@@ -645,12 +643,9 @@ function GraphEditorPageInner() {
           },
         } satisfies Node<CourseNodeData>;
       } else {
-        // Moving INTO or BETWEEN containers - calculate relative position
+        // Moving INTO or BETWEEN containers - calculate relative position (#4)
         const relativePosition = nextContainerNode
-          ? {
-              x: absoluteBefore.x - nextContainerNode.position.x,
-              y: absoluteBefore.y - nextContainerNode.position.y,
-            }
+          ? toRelative(absoluteBefore, nextContainerNode.position)
           : absoluteBefore;
 
         courseNode = {
@@ -1082,10 +1077,9 @@ function GraphEditorPageInner() {
             ? course.position_y
             : containerNode.position.y + 100,
         };
-        const relativePosition = {
-          x: absolutePosition.x - containerNode.position.x,
-          y: absolutePosition.y - containerNode.position.y,
-        };
+        // Convert to relative position for child node (#4)
+        const relativePosition = toRelative(absolutePosition, containerNode.position);
+
         return {
           id: course.id,
           type: "course",
@@ -1325,11 +1319,9 @@ function GraphEditorPageInner() {
             if (childCourses.length > 0) {
               childCourses.forEach((childNode) => {
                 // Child positions in React Flow are relative to parent
-                // Calculate new absolute position using the current relative position + new container position
-                const newAbsolutePosition = {
-                  x: childNode.position.x + snapped.x,
-                  y: childNode.position.y + snapped.y,
-                };
+                // Calculate new absolute position using toAbsolute utility (#4)
+                const newAbsolutePosition = toAbsolute(childNode.position, snapped);
+
                 // Queue update for batch processing - won't trigger cache update
                 pendingCourseUpdatesRef.current.set(childNode.id, newAbsolutePosition);
               });
@@ -1357,10 +1349,8 @@ function GraphEditorPageInner() {
           const parentNodeId = node.parentId || node.parentNode;
           const parentNode = nodesMapRef.current.get(parentNodeId || "");
           if (parentNode) {
-            absolutePosition = {
-              x: node.position.x + parentNode.position.x,
-              y: node.position.y + parentNode.position.y,
-            };
+            // Convert relative to absolute using utility (#4)
+            absolutePosition = toAbsolute(node.position, parentNode.position);
           } else {
             // Fallback if parent not found - log warning and treat as top-level
             console.warn(
