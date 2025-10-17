@@ -144,23 +144,35 @@ Incremental node updates for container data changes (title, color/palette).
 
 ## 📊 Test Results
 
-**Tester**: [Your Name]  
-**Date**: [Test Date]  
+**Tester**: Adam Simkin  
+**Date**: October 17, 2025  
 **Browser**: Chrome/Safari (macOS)  
 
 | Test | Pass | Fail | Notes |
 |------|------|------|-------|
-| 1. Title Update | ☐ | ☐ |  |
-| 2. Color/Palette | ☐ | ☐ |  |
-| 3. Rapid Changes | ☐ | ☐ |  |
-| 4. With Courses Inside | ☐ | ☐ |  |
-| 5. Resize Still Works | ☐ | ☐ |  |
+| 1. Title Update | ✅ | ☐ | Works perfectly - instant update with Save/Cancel |
+| 2. Color/Palette | ✅ | ☐ | Preview works, saves on submit |
+| 3. Rapid Changes | ✅ | ☐ | No race conditions, smooth updates |
+| 4. With Courses Inside | ✅ | ☐ | Container updates, courses stay stable |
+| 5. Resize Still Works | ✅ | ☐ | Resize mechanism independent, works fine |
 
-**Overall Result**: ☐ PASS | ☐ FAIL | ☐ NEEDS FIXES
+**Overall Result**: ✅ PASS | ☐ FAIL | ☐ NEEDS FIXES
 
-**Issues Found**:
+**Issues Found & Fixed**:
 ```
-[List any issues discovered during testing]
+Initial Issues (All Fixed):
+1. ❌ No Save/Cancel buttons - Submit button was commented out
+2. ❌ Color changes persisted immediately - handlePaletteSelect called updateSingleContainer
+3. ❌ Container color updated in real-time - Same root cause
+
+Fixes Applied:
+1. ✅ Removed immediate updates from handlePaletteSelect - now only updates local state
+2. ✅ Added Save/Cancel buttons in footer
+3. ✅ Added handleCancel() to reset state on cancel
+4. ✅ Preview updates via previewVisual (derived from local state)
+5. ✅ Changes only persist when Save is clicked
+
+Result: Perfect UX consistency - preview locally, commit on Save, discard on Cancel
 ```
 
 ---

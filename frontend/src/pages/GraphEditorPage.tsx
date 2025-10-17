@@ -3750,9 +3750,26 @@ function ContainerSidePanel({
 
   const handlePaletteSelect = (nextPaletteId: string | null) => {
     setPaletteId(nextPaletteId);
-    const updates = {
-      palette_id: nextPaletteId ?? null,
-      color: storedContainerColor(nextPaletteId, container.color),
+    // Note: We only update local state here
+    // The visual preview updates via the `previewVisual` variable below
+    // Changes are saved to React Flow + backend when form is submitted
+  };
+
+  const handleCancel = () => {
+    // Reset local state to original values
+    setTitle(container.title);
+    setPaletteId(container.palette_id ?? null);
+    onClose();
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    
+    // Prepare all updates (title + color/palette)
+    const updates: Partial<ContainerShape> = {
+      title,
+      palette_id: paletteId ?? null,
+      color: storedContainerColor(paletteId, container.color),
     };
     
     // Incremental update: Update the container node immediately (#13 Phase 2)
@@ -3760,16 +3777,6 @@ function ContainerSidePanel({
     
     // Persist to backend
     onChange(container.id, updates);
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    
-    // Incremental update: Update the container node immediately (#13 Phase 2)
-    updateSingleContainer(container.id, { title });
-    
-    // Persist to backend
-    onChange(container.id, { title });
     onClose();
   };
 
@@ -3899,12 +3906,21 @@ function ContainerSidePanel({
         )}
       </section>
 
-      {/* <button
-        type="submit"
-        className="mt-auto rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark"
-      >
-        Save changes
-      </button> */}
+      <footer className="mt-auto flex gap-2">
+        <button
+          type="submit"
+          className="flex-1 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-offset-slate-900"
+        >
+          Cancel
+        </button>
+      </footer>
     </form>
   );
 }
