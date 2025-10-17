@@ -67,6 +67,8 @@ import {
   type SampleGraph,
 } from "../sections/graph-editor/sampleGraphImport";
 import { Skeleton } from "../components/Skeleton";
+import { useLoadingState, LoadingOperations } from "../hooks/useLoadingState";
+import { InlineSpinner } from "../components/Spinner";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ContainerShape } from "../sections/graph-editor/types";
 import {
@@ -508,6 +510,9 @@ function GraphEditorPageInner() {
   const pendingCourseUpdatesRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const nodesMapRef = useRef<Map<string, Node<EditorNodeData>>>(new Map());
   const graphMutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  // Loading state management (#11)
+  const loading = useLoadingState();
 
   const updateGraphCache = useCallback(
     (updater: (draft: GraphDetail) => void) => {
@@ -1811,8 +1816,35 @@ function GraphEditorPageInner() {
         toast.error("Credits must be a positive number.", { duration: 3000 });
         return;
       }
+
+      // Start loading state (#11)
+      loading.start(LoadingOperations.CREATE_COURSE);
+
+      // Create temporary ID for optimistic update (#11)
+      const tempId = `temp-course-${Date.now()}`;
+
+      // Optimistic update: Add course immediately to cache (#11)
+      const optimisticCourse: CourseDetail = {
+        id: tempId,
+        code,
+        title,
+        credits: Math.round(creditsValue),
+        term: data.term.trim() || null,
+        status: data.status,
+        is_pass_fail: data.is_pass_fail,
+        notes: data.notes.trim() ? data.notes.trim() : null,
+        prerequisites: [],
+        position_x: 100,
+        position_y: 100,
+        grade: null,
+      };
+
+      updateGraphCache((draft) => {
+        draft.courses.push(optimisticCourse);
+      });
+
       try {
-        await createCourseMutation.mutateAsync({
+        const realCourse = await createCourseMutation.mutateAsync({
           code,
           title,
           credits: Math.round(creditsValue),
@@ -1821,16 +1853,34 @@ function GraphEditorPageInner() {
           is_pass_fail: data.is_pass_fail,
           notes: data.notes.trim() ? data.notes.trim() : null,
         });
+
+        // Replace temp course with real course in cache (#11)
+        updateGraphCache((draft) => {
+          const index = draft.courses.findIndex((c) => c.id === tempId);
+          if (index !== -1) {
+            draft.courses[index] = realCourse;
+          }
+        });
+
         toast.success("Course created successfully");
         setIsAddCourseOpen(false);
       } catch (error) {
         console.error("Failed to create course", error);
+
+        // Rollback optimistic update on error (#11)
+        updateGraphCache((draft) => {
+          draft.courses = draft.courses.filter((c) => c.id !== tempId);
+        });
+
         toast.error("Failed to create course. Please try again.", {
           duration: 5000,
         });
+      } finally {
+        // Stop loading state (#11)
+        loading.stop(LoadingOperations.CREATE_COURSE);
       }
     },
-    [createCourseMutation, graphId]
+    [createCourseMutation, graphId, loading, updateGraphCache]
   );
 
   useEffect(() => {
@@ -2336,7 +2386,7 @@ function GraphEditorPageInner() {
         open={isAddCourseOpen}
         onClose={() => setIsAddCourseOpen(false)}
         onSubmit={handleCreateCourse}
-        isSubmitting={createCourseMutation.isPending}
+        isSubmitting={loading.is(LoadingOperations.CREATE_COURSE)}
       />
 
       <div className={workspaceClasses}>
@@ -3259,8 +3309,9 @@ export function AddCourseDialog({ open, onClose, onSubmit, isSubmitting }: AddCo
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
           >
+            {isSubmitting && <InlineSpinner size={16} />}
             {isSubmitting ? "Adding…" : "Add course"}
           </button>
         </div>
