@@ -3535,6 +3535,7 @@ function CourseSidePanel({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    console.log("[CourseSidePanel] handleSubmit called", { courseId: course.id, formState });
 
     // Start loading (#11)
     loading.start(LoadingOperations.UPDATE_COURSE);
@@ -3778,6 +3779,7 @@ function CourseSidePanel({
       <button
         type="submit"
         disabled={loading.is(LoadingOperations.UPDATE_COURSE)}
+        onClick={() => console.log("[CourseSidePanel] Submit button clicked")}
         className="mt-auto rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2"
       >
         {loading.is(LoadingOperations.UPDATE_COURSE) && <InlineSpinner size={16} />}
