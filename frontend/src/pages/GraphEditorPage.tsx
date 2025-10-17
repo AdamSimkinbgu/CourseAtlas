@@ -2547,8 +2547,10 @@ function GraphEditorPageInner() {
               } as React.CSSProperties
             }
           >
-            {detailQuery.isLoading ? (
-              <GraphEditorSkeleton />
+            {detailQuery.isLoading || isImporting ? (
+              <GraphEditorSkeleton
+                message={isImporting ? "Importing graph data..." : "Loading graph..."}
+              />
             ) : (
               <>
                 <ReactFlowProvider>

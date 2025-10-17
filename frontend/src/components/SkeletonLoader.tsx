@@ -34,7 +34,7 @@ export function CourseNodeSkeleton() {
 /**
  * Skeleton loader for the graph editor while initial data loads
  */
-export function GraphEditorSkeleton() {
+export function GraphEditorSkeleton({ message = "Loading graph..." }: { message?: string }) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-slate-50 dark:bg-slate-900">
       <div className="flex flex-col items-center gap-6">
@@ -45,9 +45,7 @@ export function GraphEditorSkeleton() {
 
         {/* Loading text */}
         <div className="flex flex-col items-center gap-2">
-          <div className="text-lg font-medium text-slate-700 dark:text-slate-300">
-            Loading graph...
-          </div>
+          <div className="text-lg font-medium text-slate-700 dark:text-slate-300">{message}</div>
           <Skeleton className="h-3 w-48" />
         </div>
 
